@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Penguin Drop 3D</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #87CEEB; font-family: 'Courier New', Courier, monospace; touch-action: none; }
+        #game-canvas { display: block; width: 100%; height: 100%; }
+        
+        /* UI de la Sala (Lobby) */
+        #lobby { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; }
+        #lobby h1 { text-shadow: 2px 2px 0px #00f; color: #0ff; }
+        .panel { background: #222; padding: 20px; border-radius: 10px; text-align: center; border: 2px solid #0ff; margin-bottom: 10px;}
+        input, button { padding: 10px; margin: 5px; font-size: 16px; border-radius: 5px; border: none; font-family: inherit; }
+        button { background: #0ff; color: #000; cursor: pointer; font-weight: bold; }
+        button:disabled { background: #555; cursor: not-allowed; }
+        #qrcode { margin: 15px auto; padding: 10px; background: white; width: max-content; }
+        
+        /* UI de Nombre, Trofeos y Rachas */
+        .player-info { margin-bottom: 15px; border-bottom: 1px solid #0ff; padding-bottom: 15px; }
+        #player-name { background: #111; color: #0ff; border: 1px solid #0ff; text-align: center; }
+        #trophy-display { color: gold; font-weight: bold; font-size: 18px; text-shadow: 1px 1px 0 #000; margin-top: 10px; }
+        #streak-display { color: #ff4500; font-weight: bold; font-size: 16px; margin-top: 5px; text-shadow: 1px 1px 0 #000; }
+
+        /* UI del Juego */
+        #ui { position: absolute; top: 10px; left: 10px; right: 10px; display: none; justify-content: space-between; z-index: 5; pointer-events: none; color: white; text-shadow: 1px 1px 0 #000; }
+        #timer { font-size: 24px; font-weight: bold; color: #ff0; }
+        #leaderboard { background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; }
+        
+        /* Controles Móviles */
+        #controls { position: absolute; bottom: 0; left: 0; width: 100%; height: 40%; display: none; z-index: 5; pointer-events: none; }
+        #joystick-zone { position: absolute; left: 0; bottom: 0; width: 50%; height: 100%; pointer-events: auto; }
+        #buttons-zone { position: absolute; right: 20px; bottom: 20px; display: flex; gap: 15px; pointer-events: auto; }
+        .action-btn { width: 60px; height: 60px; border-radius: 50%; background: rgba(0, 255, 255, 0.5); border: 2px solid #0ff; color: white; font-weight: bold; font-size: 12px; display: flex; align-items: center; justify-content: center; user-select: none; }
+        .action-btn:active { background: rgba(0, 255, 255, 0.8); }
+
+        /* Pantalla de Fin de Juego */
+        #end-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 20; color: white; text-align: center; }
+        #end-title { font-size: 40px; margin-bottom: 10px; text-shadow: 2px 2px 0 #000; }
+        #end-trophies { font-size: 30px; color: gold; margin: 10px 0; text-shadow: 1px 1px 0 #000; }
+        #end-streak { font-size: 24px; color: #ff4500; margin-bottom: 20px; text-shadow: 1px 1px 0 #000; }
+        #end-leaderboard { background: #222; padding: 20px; border-radius: 10px; border: 2px solid #fff; margin-bottom: 20px; text-align: left; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
+</head>
+<body>
+
+    <div id="lobby">
+        <h1>PENGUIN DROP</h1>
+        <div class="panel" id="main-panel">
+            <div class="player-info">
+                <p>Tu Nombre:</p>
+                <input type="text" id="player-name" placeholder="Ej. ProGamer" maxlength="12">
+                <div id="trophy-display">Trofeos: <span id="lobby-trophies">0</span> 🏆</div>
+                <div id="streak-display">Racha: <span id="lobby-streak">0</span> 🔥</div>
+            </div>
+            <button onclick="hostGame()">Crear Sala (Host)</button>
+            <p>o</p>
+            <input type="text" id="join-id" placeholder="ID de la Sala">
+            <button onclick="joinGame()">Unirse a Sala</button>
+        </div>
+        <div class="panel" id="host-panel" style="display:none;">
+            <h3>Sala Creada</h3>
+            <p>ID: <span id="room-id" style="color:#0ff; font-weight:bold;">Cargando...</span></p>
+            <div id="qrcode"></div>
+            <p>Jugadores: <span id="player-count">1</span>/10</p>
+            <p style="font-size:12px; color:#aaa;">(Mínimo 2 jugadores para iniciar)</p>
+            <button id="btn-start" disabled onclick="startGame()">INICIAR PARTIDA</button>
+        </div>
+    </div>
+
+    <div id="ui">
+        <div id="timer">02:00</div>
+        <div id="leaderboard">Cargando puntuaciones...</div>
+    </div>
+
+    <div id="controls">
+        <div id="joystick-zone"></div>
+        <div id="buttons-zone">
+            <div class="action-btn" id="btn-jump">SALTAR</div>
+            <div class="action-btn" id="btn-grab">AGARRAR</div>
+            <div class="action-btn" id="btn-throw">TIRAR</div>
+        </div>
+    </div>
+
+    <div id="end-screen">
+        <h1 id="end-title">¡TIEMPO AGOTADO!</h1>
+        <h2 id="end-trophies">+0 🏆</h2>
+        <h3 id="end-streak">Racha: 0 🔥</h3>
+        <div id="end-leaderboard"></div>
+        <button onclick="location.reload()" style="padding: 15px 30px; font-size: 20px;">Volver a Jugar</button>
+    </div>
+
+    <script>
+        // --- SISTEMAS DE GUARDADO LOCAL (Nombres, Trofeos y Rachas) ---
+        let myName = localStorage.getItem('pd_playerName') || 'Pinguino' + Math.floor(Math.random()*1000);
+        let myTrophies = parseInt(localStorage.getItem('pd_trophies') || '0');
+        let myWinStreak = parseInt(localStorage.getItem('pd_winStreak') || '0');
+        let gameEnded = false;
+
+        // Inicializar UI del lobby
+        document.getElementById('player-name').value = myName;
+        document.getElementById('lobby-trophies').innerText = myTrophies;
+        document.getElementById('lobby-streak').innerText = myWinStreak;
+
+        function savePlayerConfig() {
+            let n = document.getElementById('player-name').value.trim();
+            if(n !== "") myName = n;
+            localStorage.setItem('pd_playerName', myName);
+            myInput.name = myName; // Actualizar el input a enviar
+        }
+
+        // --- SISTEMA DE AUDIO 16-BIT (Web Audio API) ---
+        let audioCtx;
+        function initAudio() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+        function playTone(freq, type, duration) {
+            if (!audioCtx) return;
+            let osc = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+            osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.start(); osc.stop(audioCtx.currentTime + duration);
+        }
+        const sfx = {
+            jump: () => playTone(600, 'square', 0.2),
+            grab: () => playTone(800, 'triangle', 0.1),
+            throw: () => playTone(300, 'sawtooth', 0.3),
+            fall: () => { playTone(200, 'sawtooth', 0.1); setTimeout(() => playTone(150, 'sawtooth', 0.5), 100); },
+            score: () => { playTone(800, 'square', 0.1); setTimeout(() => playTone(1200, 'square', 0.2), 100); },
+            win: () => { playTone(400, 'square', 0.1); setTimeout(() => playTone(600, 'square', 0.1), 150); setTimeout(() => playTone(800, 'square', 0.4), 300); },
+            lose: () => { playTone(300, 'sawtooth', 0.3); setTimeout(() => playTone(200, 'sawtooth', 0.5), 350); }
+        };
+
+        // --- ESTADO GLOBAL Y LÓGICA RED (PeerJS) ---
+        const peer = new Peer();
+        let myId = null;
+        let isHost = false;
+        let connections = []; // Solo para el host
+        let hostConnection = null; // Solo para clientes
+        
+        let gameState = {
+            status: 'lobby', // lobby, playing, end
+            timeLeft: 120,
+            players: {}, // { id: { x, y, z, score, rx, ry, name } }
+            penguins: [] // { id, x, y, z, heldBy }
+        };
+
+        // Input local (Ahora incluye el nombre)
+        let myInput = { moveX: 0, moveZ: 0, jump: false, grab: false, throw: false, rotY: 0, name: myName };
+
+        peer.on('open', id => { myId = id; });
+
+        function hostGame() {
+            savePlayerConfig();
+            initAudio();
+            isHost = true;
+            document.getElementById('main-panel').style.display = 'none';
+            document.getElementById('host-panel').style.display = 'block';
+            document.getElementById('room-id').innerText = myId;
+            new QRCode(document.getElementById("qrcode"), { text: myId, width: 128, height: 128 });
+            
+            // Host se añade a sí mismo
+            gameState.players[myId] = { x: 0, y: 5, z: 0, score: 0, rotY: 0, name: myName };
+            
+            peer.on('connection', conn => {
+                if(Object.keys(gameState.players).length >= 10) return conn.close(); // Límite de 10
+                connections.push(conn);
+                conn.on('data', data => handleClientInput(conn.peer, data));
+                conn.on('open', () => {
+                    gameState.players[conn.peer] = { x: Math.random()*10-5, y: 5, z: Math.random()*10-5, score: 0, rotY: 0, name: "Conectando..." };
+                    updateLobbyUI();
+                });
+                conn.on('close', () => {
+                    delete gameState.players[conn.peer];
+                    connections = connections.filter(c => c.peer !== conn.peer);
+                    updateLobbyUI();
+                });
+            });
+        }
+
+        function joinGame() {
+            savePlayerConfig();
+            initAudio();
+            const hostId = document.getElementById('join-id').value;
+            if(!hostId) return alert('Introduce un ID válido');
+            
+            hostConnection = peer.connect(hostId);
+            hostConnection.on('open', () => {
+                document.getElementById('lobby').innerHTML = "<h2>Conectado. Esperando al Host...</h2>";
+            });
+            hostConnection.on('data', data => {
+                if(data.type === 'update') {
+                    gameState = data.state;
+                    if(gameState.status === 'playing' && !scene) init3D();
+                    updateUI(); // El cliente actualiza su UI al recibir datos
+                }
+            });
+        }
+
+        function updateLobbyUI() {
+            const count = Object.keys(gameState.players).length;
+            document.getElementById('player-count').innerText = count;
+            document.getElementById('btn-start').disabled = count < 2; // Requiere mínimo 2
+        }
+
+        function startGame() {
+            if(!isHost) return;
+            gameState.status = 'playing';
+            // Generar pingüinos
+            for(let i=0; i<15; i++) {
+                gameState.penguins.push({
+                    id: i, x: Math.random()*40-20, y: 2, z: Math.random()*40-20, heldBy: null, lastHeldBy: null
+                });
+            }
+            document.getElementById('lobby').style.display = 'none';
+            init3D();
+            
+            // Bucle de servidor
+            setInterval(hostGameLoop, 1000 / 30); // 30 TPS
+            setInterval(() => {
+                if(gameState.timeLeft > 0) gameState.timeLeft--;
+                else if(gameState.timeLeft <= 0 && gameState.status === 'playing') gameState.status = 'end';
+            }, 1000);
+        }
+
+        function handleClientInput(id, input) {
+            if(gameState.players[id]) {
+                gameState.players[id].input = input;
+                if(input.name) gameState.players[id].name = input.name; // Sincronizar nombre del cliente
+            }
+        }
+
+        // --- LÓGICA DEL JUEGO (Autoritativo en el Host) ---
+        const MOUNTAIN_RADIUS = 50;
+        function hostGameLoop() {
+            // Asegurar que el nombre del host siempre está actualizado
+            if(gameState.players[myId]) gameState.players[myId].name = myName;
+
+            if(gameState.status !== 'playing') {
+                // Si el juego terminó, seguir enviando actualizaciones un par de veces para asegurar sincronización
+                if(gameState.status === 'end') {
+                    const syncData = { type: 'update', state: gameState };
+                    connections.forEach(conn => conn.send(syncData));
+                    updateUI(); // El host también actualiza su pantalla final
+                }
+                return;
+            }
+
+            Object.keys(gameState.players).forEach(id => {
+                let p = gameState.players[id];
+                let input = id === myId ? myInput : (p.input || { moveX:0, moveZ:0 });
+                
+                // Movimiento básico (sin motor de físicas complejo por rendimiento)
+                p.x += input.moveX * 0.5;
+                p.z += input.moveZ * 0.5;
+                p.rotY = input.rotY;
+
+                // Salto simple
+                if(p.y <= 1.5 && input.jump) { p.vy = 1; }
+                if(p.vy !== undefined) { p.y += p.vy; p.vy -= 0.1; } // Gravedad
+                if(p.y < 1.5) { p.y = 1.5; p.vy = 0; } // Suelo
+
+                // Caída de la montaña (Jugador)
+                if(Math.hypot(p.x, p.z) > MOUNTAIN_RADIUS) {
+                    p.y -= 1; // Cae al vacío
+                    if(p.y < -20) {
+                        // Respawn sin perder puntos, como pediste
+                        p.x = 0; p.y = 10; p.z = 0;
+                        if(id === myId) sfx.fall();
+                    }
+                }
+
+                // Acciones
+                if(input.grab) attemptGrab(id, p);
+                if(input.throw) attemptThrow(id, p);
+                
+                // Resetear inputs unistroke del cliente tras procesar
+                if(id !== myId && p.input) { p.input.jump = false; p.input.grab = false; p.input.throw = false; }
+            });
+
+            // Físicas de Pingüinos
+            gameState.penguins.forEach(pg => {
+                if(pg.heldBy) {
+                    let owner = gameState.players[pg.heldBy];
+                    if(owner) {
+                        pg.x = owner.x; pg.y = owner.y + 3; pg.z = owner.z; // Sobre la cabeza
+                    } else { pg.heldBy = null; }
+                } else {
+                    // Gravedad e Inercia del lanzamiento
+                    if(pg.vx) pg.x += pg.vx;
+                    if(pg.vz) pg.z += pg.vz;
+                    if(pg.vy) pg.y += pg.vy;
+                    
+                    if(pg.vy !== undefined) pg.vy -= 0.1; // Gravedad
+                    
+                    if(pg.y < 1 && Math.hypot(pg.x, pg.z) <= MOUNTAIN_RADIUS) {
+                        pg.y = 1; pg.vy = 0; // Fricción
+                        if(pg.vx) { pg.vx *= 0.8; if(Math.abs(pg.vx) < 0.1) pg.vx = 0; }
+                        if(pg.vz) { pg.vz *= 0.8; if(Math.abs(pg.vz) < 0.1) pg.vz = 0; }
+                    }
+
+                    // Caída al vacío (Puntaje!)
+                    if(Math.hypot(pg.x, pg.z) > MOUNTAIN_RADIUS) {
+                        pg.y -= 1;
+                        if(pg.y < -30) {
+                            if(pg.lastHeldBy && gameState.players[pg.lastHeldBy]) {
+                                gameState.players[pg.lastHeldBy].score++;
+                                if(pg.lastHeldBy === myId) sfx.score();
+                            }
+                            // Respawn pingüino
+                            pg.x = Math.random()*40-20; pg.y = 10; pg.z = Math.random()*40-20;
+                            pg.vx = 0; pg.vy = 0; pg.vz = 0; pg.lastHeldBy = null;
+                        }
+                    }
+                }
+            });
+
+            // Resetear mis inputs locales unistroke
+            myInput.jump = false; myInput.grab = false; myInput.throw = false;
+
+            // Enviar a clientes
+            const syncData = { type: 'update', state: gameState };
+            connections.forEach(conn => conn.send(syncData));
+            
+            // SOLUCIÓN BUG DEL HOST: El host ahora actualiza su propia UI para ver el timer y la tabla
+            updateUI(); 
+        }
+
+        function attemptGrab(playerId, playerData) {
+            let holding = gameState.penguins.find(p => p.heldBy === playerId);
+            if(holding) return;
+
+            let closest = null; let minDist = 5; 
+            gameState.penguins.forEach(pg => {
+                if(pg.heldBy) return;
+                let dist = Math.hypot(pg.x - playerData.x, pg.z - playerData.z);
+                if(dist < minDist) { minDist = dist; closest = pg; }
+            });
+            if(closest) { closest.heldBy = playerId; closest.lastHeldBy = playerId; if(playerId === myId) sfx.grab(); }
+        }
+
+        function attemptThrow(playerId, playerData) {
+            let holding = gameState.penguins.find(p => p.heldBy === playerId);
+            if(holding) {
+                holding.heldBy = null;
+                holding.vx = Math.sin(playerData.rotY) * 2;
+                holding.vy = 1.5; 
+                holding.vz = Math.cos(playerData.rotY) * 2;
+                if(playerId === myId) sfx.throw();
+            }
+        }
+
+        // --- CLIENTE 3D (Three.js) ---
+        let scene, camera, renderer;
+        let playerMeshes = {};
+        let penguinMeshes = {};
+
+        function init3D() {
+            document.getElementById('lobby').style.display = 'none';
+            document.getElementById('ui').style.display = 'flex';
+            document.getElementById('controls').style.display = 'block';
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB); 
+            scene.fog = new THREE.Fog(0x87CEEB, 30, 100);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
+            hemiLight.position.set(0, 50, 0);
+            scene.add(hemiLight);
+
+            const geoMountain = new THREE.CylinderGeometry(MOUNTAIN_RADIUS, MOUNTAIN_RADIUS+20, 20, 32);
+            const matMountain = new THREE.MeshPhongMaterial({ color: 0xddddff, flatShading: true });
+            const mountain = new THREE.Mesh(geoMountain, matMountain);
+            mountain.position.y = -10;
+            scene.add(mountain);
+
+            const manager = nipplejs.create({
+                zone: document.getElementById('joystick-zone'),
+                mode: 'static', position: { left: '50%', bottom: '50%' }, color: '#0ff'
+            });
+            manager.on('move', (e, data) => {
+                const angle = data.angle.radian;
+                myInput.moveX = Math.cos(angle);
+                myInput.moveZ = -Math.sin(angle);
+                myInput.rotY = Math.atan2(myInput.moveX, myInput.moveZ);
+            });
+            manager.on('end', () => { myInput.moveX = 0; myInput.moveZ = 0; });
+
+            document.getElementById('btn-jump').addEventListener('touchstart', (e)=>{ e.preventDefault(); myInput.jump = true; sfx.jump(); });
+            document.getElementById('btn-grab').addEventListener('touchstart', (e)=>{ e.preventDefault(); myInput.grab = true; });
+            document.getElementById('btn-throw').addEventListener('touchstart', (e)=>{ e.preventDefault(); myInput.throw = true; });
+
+            animate3D();
+        }
+
+        const matPlayerMe = new THREE.MeshPhongMaterial({ color: 0x00ff00 });
+        const matPlayerOther = new THREE.MeshPhongMaterial({ color: 0xff0000 });
+        const matPenguin = new THREE.MeshPhongMaterial({ color: 0x3333ff });
+
+        function animate3D() {
+            if(gameState.status !== 'playing' && gameState.status !== 'end') return;
+            requestAnimationFrame(animate3D);
+
+            Object.keys(gameState.players).forEach(id => {
+                let pData = gameState.players[id];
+                if(!playerMeshes[id]) {
+                    let mesh = new THREE.Mesh(new THREE.BoxGeometry(2,3,2), id === myId ? matPlayerMe : matPlayerOther);
+                    scene.add(mesh);
+                    playerMeshes[id] = mesh;
+                }
+                playerMeshes[id].position.set(pData.x, pData.y, pData.z);
+                playerMeshes[id].rotation.y = pData.rotY;
+            });
+
+            Object.keys(playerMeshes).forEach(id => {
+                if(!gameState.players[id]) { scene.remove(playerMeshes[id]); delete playerMeshes[id]; }
+            });
+
+            gameState.penguins.forEach(pg => {
+                if(!penguinMeshes[pg.id]) {
+                    let mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1, 2, 8), matPenguin);
+                    scene.add(mesh);
+                    penguinMeshes[pg.id] = mesh;
+                }
+                penguinMeshes[pg.id].position.set(pg.x, pg.y, pg.z);
+            });
+
+            if(gameState.players[myId] && playerMeshes[myId]) {
+                const myPos = playerMeshes[myId].position;
+                camera.position.x = myPos.x;
+                camera.position.y = myPos.y + 15;
+                camera.position.z = myPos.z + 20;
+                camera.lookAt(myPos);
+            }
+
+            if(!isHost && hostConnection && hostConnection.open) {
+                hostConnection.send(myInput);
+                myInput.jump = false; myInput.grab = false; myInput.throw = false;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        function updateUI() {
+            let m = Math.floor(gameState.timeLeft / 60).toString().padStart(2, '0');
+            let s = (gameState.timeLeft % 60).toString().padStart(2, '0');
+            document.getElementById('timer').innerText = `${m}:${s}`;
+
+            // Ordenar jugadores por puntos
+            let sortedPlayers = Object.keys(gameState.players)
+                .map(id => ({ id, score: gameState.players[id].score, name: gameState.players[id].name || 'Jugador' }))
+                .sort((a,b) => b.score - a.score);
+
+            // Actualizar tabla en juego
+            let boardHTML = sortedPlayers
+                .map((p, i) => `${i+1}. ${p.id === myId ? '<span style="color:#0f0">TÚ</span>' : p.name} - ${p.score} pts`)
+                .join('<br>');
+            document.getElementById('leaderboard').innerHTML = boardHTML;
+            
+            // --- LÓGICA DE FIN DE PARTIDA ---
+            if(gameState.status === 'end' && !gameEnded) {
+                gameEnded = true;
+                
+                // Ocultar UI de juego y mostrar Pantalla Final
+                document.getElementById('ui').style.display = 'none';
+                document.getElementById('controls').style.display = 'none';
+                document.getElementById('end-screen').style.display = 'flex';
+                
+                // Determinar posición
+                let myRank = sortedPlayers.findIndex(p => p.id === myId);
+                let isFirst = myRank === 0 && sortedPlayers.length > 0;
+                
+                let title = document.getElementById('end-title');
+                let trophyText = document.getElementById('end-trophies');
+                let streakText = document.getElementById('end-streak');
+                
+                if(isFirst) {
+                    title.innerText = "¡VICTORIA! 👑";
+                    title.style.color = "#0f0";
+                    myWinStreak++; // Aumentar racha
+                    let streakBonus = myWinStreak > 1 ? (myWinStreak * 2) : 0; // Bonus por racha
+                    let totalEarned = 15 + streakBonus;
+                    
+                    myTrophies += totalEarned;
+                    trophyText.innerText = `+${totalEarned} Trofeos 🏆`;
+                    if (streakBonus > 0) trophyText.innerText += ` (Bonus Racha +${streakBonus})`;
+                    trophyText.style.color = "#0f0";
+                    sfx.win();
+                } else {
+                    title.innerText = "¡DERROTA! 🧊";
+                    title.style.color = "#f00";
+                    let lostTrophies = Math.min(myTrophies, 5); // No bajar de 0
+                    
+                    myTrophies -= lostTrophies;
+                    myWinStreak = 0; // Se pierde la racha
+                    
+                    trophyText.innerText = "-" + lostTrophies + " Trofeos 🏆";
+                    trophyText.style.color = "#f00";
+                    sfx.lose();
+                }
+
+                // Guardar nuevos trofeos y racha en el navegador
+                localStorage.setItem('pd_trophies', myTrophies);
+                localStorage.setItem('pd_winStreak', myWinStreak);
+                streakText.innerText = `Racha Actual: ${myWinStreak} 🔥`;
+                
+                // Mostrar resultados finales
+                let finalBoard = sortedPlayers
+                    .map((p, i) => `<div style="padding: 5px; border-bottom: 1px solid #555;">
+                        <strong>#${i+1}</strong> ${p.name} <span style="float:right; color:#0ff">${p.score} pts</span>
+                    </div>`)
+                    .join('');
+                document.getElementById('end-leaderboard').innerHTML = finalBoard;
+            }
+        }
+    </script>
+</body>
+</html>
