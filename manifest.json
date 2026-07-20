@@ -1,0 +1,23 @@
+{
+  "name": "Pac-Rush",
+  "short_name": "Pac-Rush",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "background_color": "#0527ff",
+  "theme_color": "#faff05",
+  "categories": [
+  "games"
+  ],
+  "icons": [
+    {
+      "src": "Pac-Rush.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "Pac-Rush.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
