@@ -1,6 +1,6 @@
 {
-  "name": "Pac-Rush",
-  "short_name": "Pac-Rush",
+  "name": "Penguin drop",
+  "short_name": "Penguindrop",
   "start_url": "./index.html",
   "display": "fullscreen",
   "background_color": "#0527ff",
@@ -10,12 +10,12 @@
   ],
   "icons": [
     {
-      "src": "Pac-Rush.png",
+      "src": "Penguin drop.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "Pac-Rush.png",
+      "src": "Penguin drop.png",
       "sizes": "512x512",
       "type": "image/png"
     }
