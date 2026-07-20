@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Penguin Drop</title>
+    <title>Penguin Drop 3D</title>
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #87CEEB; font-family: 'Courier New', Courier, monospace; touch-action: none; }
         #game-canvas { display: block; width: 100%; height: 100%; }
@@ -55,6 +55,13 @@
             <div class="player-info">
                 <p>Tu Nombre:</p>
                 <input type="text" id="player-name" placeholder="Ej. ProGamer" maxlength="12">
+                
+                <p style="margin-top: 15px; margin-bottom: 5px; font-size: 14px; color: #0ff;">Elige tu Personaje:</p>
+                <div style="display: flex; gap: 10px; justify-content: center; margin-bottom: 15px;">
+                    <button id="btn-mario" onclick="selectCharacter('mario')" style="flex: 1; padding: 8px; font-size: 14px; background: #e42400; color: white; border: 2px solid white; border-radius: 5px; font-weight: bold; transition: all 0.2s;">Mario 🔴</button>
+                    <button id="btn-luigi" onclick="selectCharacter('luigi')" style="flex: 1; padding: 8px; font-size: 14px; background: #555; color: #ccc; border: 2px solid transparent; border-radius: 5px; font-weight: bold; transition: all 0.2s;">Luigi 🟢</button>
+                </div>
+
                 <div id="trophy-display">Trofeos: <span id="lobby-trophies">0</span> 🏆</div>
                 <div id="streak-display">Racha: <span id="lobby-streak">0</span> 🔥</div>
             </div>
@@ -96,16 +103,49 @@
     </div>
 
     <script>
-        // --- SISTEMAS DE GUARDADO LOCAL (Nombres, Trofeos y Rachas) ---
+        // --- SISTEMAS DE GUARDADO LOCAL (Nombres, Trofeos, Rachas y Personaje) ---
         let myName = localStorage.getItem('pd_playerName') || 'Pinguino' + Math.floor(Math.random()*1000);
         let myTrophies = parseInt(localStorage.getItem('pd_trophies') || '0');
         let myWinStreak = parseInt(localStorage.getItem('pd_winStreak') || '0');
+        let myCharacter = localStorage.getItem('pd_character') || 'mario';
         let gameEnded = false;
 
         // Inicializar UI del lobby
         document.getElementById('player-name').value = myName;
         document.getElementById('lobby-trophies').innerText = myTrophies;
         document.getElementById('lobby-streak').innerText = myWinStreak;
+
+        // Input local (Ahora incluye el nombre y el tipo de personaje elegido)
+        let myInput = { moveX: 0, moveZ: 0, jump: false, grab: false, throw: false, rotY: 0, name: myName, character: myCharacter };
+
+        function selectCharacter(char) {
+            myCharacter = char;
+            localStorage.setItem('pd_character', char);
+            myInput.character = char;
+            
+            const btnMario = document.getElementById('btn-mario');
+            const btnLuigi = document.getElementById('btn-luigi');
+            
+            if (char === 'mario') {
+                btnMario.style.background = '#e42400';
+                btnMario.style.color = 'white';
+                btnMario.style.border = '2px solid white';
+                
+                btnLuigi.style.background = '#555';
+                btnLuigi.style.color = '#ccc';
+                btnLuigi.style.border = '2px solid transparent';
+            } else {
+                btnLuigi.style.background = '#00a200';
+                btnLuigi.style.color = 'white';
+                btnLuigi.style.border = '2px solid white';
+                
+                btnMario.style.background = '#555';
+                btnMario.style.color = '#ccc';
+                btnMario.style.border = '2px solid transparent';
+            }
+        }
+        // Aplicar seleccion guardada de personaje
+        selectCharacter(myCharacter);
 
         function savePlayerConfig() {
             let n = document.getElementById('player-name').value.trim();
@@ -150,12 +190,9 @@
         let gameState = {
             status: 'lobby', // lobby, playing, end
             timeLeft: 120,
-            players: {}, // { id: { x, y, z, score, rx, ry, name } }
+            players: {}, // { id: { x, y, z, score, rx, ry, name, character } }
             penguins: [] // { id, x, y, z, heldBy }
         };
-
-        // Input local (Ahora incluye el nombre)
-        let myInput = { moveX: 0, moveZ: 0, jump: false, grab: false, throw: false, rotY: 0, name: myName };
 
         peer.on('open', id => { myId = id; });
 
@@ -168,15 +205,15 @@
             document.getElementById('room-id').innerText = myId;
             new QRCode(document.getElementById("qrcode"), { text: myId, width: 128, height: 128 });
             
-            // Host se añade a sí mismo
-            gameState.players[myId] = { x: 0, y: 5, z: 0, score: 0, rotY: 0, name: myName };
+            // Host se añade a sí mismo con el personaje elegido
+            gameState.players[myId] = { x: 0, y: 5, z: 0, score: 0, rotY: 0, name: myName, character: myCharacter };
             
             peer.on('connection', conn => {
                 if(Object.keys(gameState.players).length >= 10) return conn.close(); // Límite de 10
                 connections.push(conn);
                 conn.on('data', data => handleClientInput(conn.peer, data));
                 conn.on('open', () => {
-                    gameState.players[conn.peer] = { x: Math.random()*10-5, y: 5, z: Math.random()*10-5, score: 0, rotY: 0, name: "Conectando..." };
+                    gameState.players[conn.peer] = { x: Math.random()*10-5, y: 5, z: Math.random()*10-5, score: 0, rotY: 0, name: "Conectando...", character: "luigi" };
                     updateLobbyUI();
                 });
                 conn.on('close', () => {
@@ -236,14 +273,18 @@
             if(gameState.players[id]) {
                 gameState.players[id].input = input;
                 if(input.name) gameState.players[id].name = input.name; // Sincronizar nombre del cliente
+                if(input.character) gameState.players[id].character = input.character; // Sincronizar personaje del cliente
             }
         }
 
         // --- LÓGICA DEL JUEGO (Autoritativo en el Host) ---
         const MOUNTAIN_RADIUS = 50;
         function hostGameLoop() {
-            // Asegurar que el nombre del host siempre está actualizado
-            if(gameState.players[myId]) gameState.players[myId].name = myName;
+            // Asegurar que el nombre y personaje del host siempre están actualizados
+            if(gameState.players[myId]) {
+                gameState.players[myId].name = myName;
+                gameState.players[myId].character = myCharacter;
+            }
 
             if(gameState.status !== 'playing') {
                 // Si el juego terminó, seguir enviando actualizaciones un par de veces para asegurar sincronización
@@ -259,6 +300,9 @@
                 let p = gameState.players[id];
                 let input = id === myId ? myInput : (p.input || { moveX:0, moveZ:0 });
                 
+                // Sincronizar personaje
+                if(input.character) p.character = input.character;
+
                 // Movimiento básico (sin motor de físicas complejo por rendimiento)
                 p.x += input.moveX * 0.5;
                 p.z += input.moveZ * 0.5;
@@ -273,7 +317,7 @@
                 if(Math.hypot(p.x, p.z) > MOUNTAIN_RADIUS) {
                     p.y -= 1; // Cae al vacío
                     if(p.y < -20) {
-                        // Respawn sin perder puntos, como pediste
+                        // Respawn sin perder puntos
                         p.x = 0; p.y = 10; p.z = 0;
                         if(id === myId) sfx.fall();
                     }
@@ -359,6 +403,213 @@
             }
         }
 
+        // --- CONSTRUCTOR 3D DE PERSONAJES (Mario / Luigi Estilo Voxel) ---
+        function createCharacterMesh(type) {
+            const charGroup = new THREE.Group();
+
+            const isLuigi = (type === 'luigi');
+            
+            // Colores característicos
+            const colorPrimary = isLuigi ? 0x00a200 : 0xe42400; // Verde Luigi / Rojo Mario
+            const colorSecondary = isLuigi ? 0x001a70 : 0x002494; // Overol Luigi / Overol Mario
+            const colorHair = isLuigi ? 0x542a00 : 0x944400; // Pelo más oscuro para Luigi
+            
+            // Materiales de estilo retro
+            const matPrimary = new THREE.MeshLambertMaterial({ color: colorPrimary });
+            const matSecondary = new THREE.MeshLambertMaterial({ color: colorSecondary });
+            const matSkin = new THREE.MeshLambertMaterial({ color: 0xfcb494 }); // Piel
+            const matBrown = new THREE.MeshLambertMaterial({ color: colorHair }); // Zapatos y pelo
+            const matYellow = new THREE.MeshLambertMaterial({ color: 0xfccc00 }); // Botones
+            const matWhite = new THREE.MeshBasicMaterial({ color: 0xffffff }); // Emblema gorra
+            const matBlack = new THREE.MeshBasicMaterial({ color: 0x000000 }); // Ojos
+
+            // 1. Zapatos
+            const shoeGeo = new THREE.BoxGeometry(0.35, 0.25, 0.45);
+            const shoeLeft = new THREE.Mesh(shoeGeo, matBrown);
+            shoeLeft.position.set(-0.25, 0.125, 0);
+            charGroup.add(shoeLeft);
+
+            const shoeRight = new THREE.Mesh(shoeGeo, matBrown);
+            shoeRight.position.set(0.25, 0.125, 0);
+            charGroup.add(shoeRight);
+
+            // 2. Piernas y Cuerpo (Overol)
+            const legGeo = new THREE.BoxGeometry(0.3, 0.35, 0.4);
+            const legLeft = new THREE.Mesh(legGeo, matSecondary);
+            legLeft.position.set(-0.25, 0.425, 0);
+            charGroup.add(legLeft);
+
+            const legRight = new THREE.Mesh(legGeo, matSecondary);
+            legRight.position.set(0.25, 0.425, 0);
+            charGroup.add(legRight);
+
+            const torsoGeo = new THREE.BoxGeometry(0.7, 0.5, 0.45);
+            const torso = new THREE.Mesh(torsoGeo, matSecondary);
+            torso.position.set(0, 0.85, 0);
+            charGroup.add(torso);
+
+            // Camisa interior
+            const chestGeo = new THREE.BoxGeometry(0.4, 0.5, 0.46);
+            const chestRed = new THREE.Mesh(chestGeo, matPrimary);
+            chestRed.position.set(0, 0.85, 0);
+            charGroup.add(chestRed);
+
+            // Botones amarillos
+            const btnGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+            const btnLeft = new THREE.Mesh(btnGeo, matYellow);
+            btnLeft.position.set(-0.15, 0.8, 0.24);
+            const btnRight = new THREE.Mesh(btnGeo, matYellow);
+            btnRight.position.set(0.15, 0.8, 0.24);
+            charGroup.add(btnLeft);
+            charGroup.add(btnRight);
+
+            // Brazos / Puños
+            const armGeo = new THREE.BoxGeometry(0.22, 0.45, 0.25);
+            const armLeft = new THREE.Mesh(armGeo, matPrimary);
+            armLeft.position.set(-0.46, 0.825, 0);
+            charGroup.add(armLeft);
+
+            const armRight = new THREE.Mesh(armGeo, matPrimary);
+            armRight.position.set(0.46, 0.825, 0);
+            charGroup.add(armRight);
+
+            const handGeo = new THREE.BoxGeometry(0.25, 0.22, 0.25);
+            const handLeft = new THREE.Mesh(handGeo, matSkin);
+            handLeft.position.set(-0.46, 0.49, 0);
+            charGroup.add(handLeft);
+
+            const handRight = new THREE.Mesh(handGeo, matSkin);
+            handRight.position.set(0.46, 0.49, 0);
+            charGroup.add(handRight);
+
+            // 3. Cabeza
+            const headGeo = new THREE.BoxGeometry(0.65, 0.55, 0.55);
+            const head = new THREE.Mesh(headGeo, matSkin);
+            head.position.set(0, 1.35, 0);
+            charGroup.add(head);
+
+            // Cabello / Patillas
+            const hairGeo = new THREE.BoxGeometry(0.68, 0.35, 0.2);
+            const hair = new THREE.Mesh(hairGeo, matBrown);
+            hair.position.set(0, 1.4, -0.2);
+            charGroup.add(hair);
+
+            // Nariz grande
+            const noseGeo = new THREE.BoxGeometry(0.25, 0.2, 0.25);
+            const nose = new THREE.Mesh(noseGeo, matSkin);
+            nose.position.set(0, 1.35, 0.32);
+            charGroup.add(nose);
+
+            // Bigote clásico
+            const stacheGeo = new THREE.BoxGeometry(0.45, 0.1, 0.1);
+            const stache = new THREE.Mesh(stacheGeo, matBrown);
+            stache.position.set(0, 1.18, 0.28);
+            charGroup.add(stache);
+
+            // Ojos
+            const eyeGeo = new THREE.BoxGeometry(0.08, 0.16, 0.05);
+            const eyeLeft = new THREE.Mesh(eyeGeo, matBlack);
+            eyeLeft.position.set(-0.15, 1.38, 0.26);
+            const eyeRight = new THREE.Mesh(eyeGeo, matBlack);
+            eyeRight.position.set(0.15, 1.38, 0.26);
+            charGroup.add(eyeLeft);
+            charGroup.add(eyeRight);
+
+            // 4. Gorra
+            const capGeo = new THREE.BoxGeometry(0.7, 0.2, 0.6);
+            const cap = new THREE.Mesh(capGeo, matPrimary);
+            cap.position.set(0, 1.68, 0);
+            charGroup.add(cap);
+
+            const brimGeo = new THREE.BoxGeometry(0.65, 0.08, 0.22);
+            const brim = new THREE.Mesh(brimGeo, matPrimary);
+            brim.position.set(0, 1.62, 0.36);
+            charGroup.add(brim);
+
+            // Emblema Blanco
+            const emblemGeo = new THREE.BoxGeometry(0.2, 0.18, 0.05);
+            const emblem = new THREE.Mesh(emblemGeo, matWhite);
+            emblem.position.set(0, 1.7, 0.3);
+            charGroup.add(emblem);
+
+            // Rotar a la orientación por defecto del juego
+            charGroup.rotation.y = Math.PI / 2;
+
+            charGroup.traverse(child => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                }
+            });
+
+            // Luigi es más alto y un poco más esbelto
+            if (isLuigi) {
+                charGroup.scale.set(1.4, 1.8, 1.4);
+            } else {
+                charGroup.scale.set(1.6, 1.6, 1.6);
+            }
+
+            return charGroup;
+        }
+
+        // --- CONSTRUCTOR 3D DE PINGÜINOS ---
+        function createPenguinMesh() {
+            const group = new THREE.Group();
+            
+            const matBlack = new THREE.MeshPhongMaterial({ color: 0x222222 });
+            const matWhite = new THREE.MeshPhongMaterial({ color: 0xffffff });
+            const matOrange = new THREE.MeshPhongMaterial({ color: 0xffa500 });
+            const matBlackEye = new THREE.MeshBasicMaterial({ color: 0x000000 });
+            
+            // Cuerpo principal
+            const body = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.6, 1.2), matBlack);
+            body.position.y = 0.8;
+            group.add(body);
+            
+            // Pancita blanca
+            const belly = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.1, 0.1), matWhite);
+            belly.position.set(0, 0.7, 0.56);
+            group.add(belly);
+            
+            // Ojos
+            const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.1), matBlackEye);
+            eyeL.position.set(-0.3, 1.2, 0.56);
+            const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.1), matBlackEye);
+            eyeR.position.set(0.3, 1.2, 0.56);
+            group.add(eyeL);
+            group.add(eyeR);
+            
+            // Pico
+            const beak = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.15, 0.3), matOrange);
+            beak.position.set(0, 1.05, 0.65);
+            group.add(beak);
+            
+            // Patitas
+            const footL = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.1, 0.5), matOrange);
+            footL.position.set(-0.35, 0.05, 0.15);
+            const footR = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.1, 0.5), matOrange);
+            footR.position.set(0.35, 0.05, 0.15);
+            group.add(footL);
+            group.add(footR);
+            
+            // Alitas
+            const flipperL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.9, 0.4), matBlack);
+            flipperL.position.set(-0.65, 0.8, 0);
+            const flipperR = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.9, 0.4), matBlack);
+            flipperR.position.set(0.65, 0.8, 0);
+            group.add(flipperL);
+            group.add(flipperR);
+            
+            group.traverse(child => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                }
+            });
+            
+            return group;
+        }
+
         // --- CLIENTE 3D (Three.js) ---
         let scene, camera, renderer;
         let playerMeshes = {};
@@ -377,16 +628,24 @@
             
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
             document.body.appendChild(renderer.domElement);
 
-            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1.2);
             hemiLight.position.set(0, 50, 0);
             scene.add(hemiLight);
+
+            // Añadir luz direccional para sombras espectaculares
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            dirLight.position.set(20, 40, 20);
+            dirLight.castShadow = true;
+            scene.add(dirLight);
 
             const geoMountain = new THREE.CylinderGeometry(MOUNTAIN_RADIUS, MOUNTAIN_RADIUS+20, 20, 32);
             const matMountain = new THREE.MeshPhongMaterial({ color: 0xddddff, flatShading: true });
             const mountain = new THREE.Mesh(geoMountain, matMountain);
             mountain.position.y = -10;
+            mountain.receiveShadow = true;
             scene.add(mountain);
 
             const manager = nipplejs.create({
@@ -408,22 +667,30 @@
             animate3D();
         }
 
-        const matPlayerMe = new THREE.MeshPhongMaterial({ color: 0x00ff00 });
-        const matPlayerOther = new THREE.MeshPhongMaterial({ color: 0xff0000 });
-        const matPenguin = new THREE.MeshPhongMaterial({ color: 0x3333ff });
-
         function animate3D() {
             if(gameState.status !== 'playing' && gameState.status !== 'end') return;
             requestAnimationFrame(animate3D);
 
             Object.keys(gameState.players).forEach(id => {
                 let pData = gameState.players[id];
+                let charType = pData.character || 'mario';
+
+                // Si no existe la malla del jugador o el personaje ha cambiado, la creamos
                 if(!playerMeshes[id]) {
-                    let mesh = new THREE.Mesh(new THREE.BoxGeometry(2,3,2), id === myId ? matPlayerMe : matPlayerOther);
+                    let mesh = createCharacterMesh(charType);
                     scene.add(mesh);
                     playerMeshes[id] = mesh;
+                    mesh.userData = { character: charType };
+                } else if(playerMeshes[id].userData.character !== charType) {
+                    scene.remove(playerMeshes[id]);
+                    let mesh = createCharacterMesh(charType);
+                    scene.add(mesh);
+                    playerMeshes[id] = mesh;
+                    mesh.userData = { character: charType };
                 }
-                playerMeshes[id].position.set(pData.x, pData.y, pData.z);
+
+                // Ajustamos la posición vertical: restamos 1.5 porque pData.y tiene un límite inferior de 1.5 (originando en el centro del modelo anterior de altura 3)
+                playerMeshes[id].position.set(pData.x, pData.y - 1.5, pData.z);
                 playerMeshes[id].rotation.y = pData.rotY;
             });
 
@@ -433,11 +700,11 @@
 
             gameState.penguins.forEach(pg => {
                 if(!penguinMeshes[pg.id]) {
-                    let mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1, 2, 8), matPenguin);
+                    let mesh = createPenguinMesh();
                     scene.add(mesh);
                     penguinMeshes[pg.id] = mesh;
                 }
-                penguinMeshes[pg.id].position.set(pg.x, pg.y, pg.z);
+                penguinMeshes[pg.id].position.set(pg.x, pg.y - 1.0, pg.z); // Ajuste de altura del pingüino
             });
 
             if(gameState.players[myId] && playerMeshes[myId]) {
@@ -531,3 +798,4 @@
     </script>
 </body>
 </html>
+
