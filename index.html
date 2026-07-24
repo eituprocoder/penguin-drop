@@ -6,14 +6,13 @@
     <title>Penguin Drop 3D</title>
     <script>
     if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js')
-      .then(() => console.log('Service Worker registrado correctamente'))
-      .catch(err => console.log('Error al registrar:', err));
-  }
-</script>
-
-<!-- No olvides vincular el manifest en el <head> -->
-<link rel="manifest" href="manifest.json">
+      navigator.serviceWorker.register('./sw.js')
+        .then(() => console.log('Service Worker registrado correctamente'))
+        .catch(err => console.log('Error al registrar:', err));
+    }
+    </script>
+    <!-- Manifest Link -->
+    <link rel="manifest" href="manifest.json">
     <style>
         * { box-sizing: border-box; }
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #70c5e8; font-family: 'Courier New', Courier, monospace; touch-action: none; user-select: none; }
@@ -42,6 +41,9 @@
         #leaderboard { background: rgba(10, 20, 35, 0.75); padding: 12px 16px; border-radius: 10px; border: 1px solid #00ffff; min-width: 170px; }
         #audio-toggle { pointer-events: auto; background: rgba(0,0,0,0.6); border: 1px solid #00ffff; color: #00ffff; width: 44px; height: 44px; border-radius: 50%; font-size: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; margin-left: 10px; }
 
+        /* Ice Power-Up Indicator Badge */
+        #ice-power-badge { position: absolute; top: 70px; left: 12px; background: rgba(0,220,255,0.85); color: #002244; font-weight: bold; padding: 8px 14px; border-radius: 20px; border: 2px solid #ffffff; box-shadow: 0 0 15px #00ffff; display: none; font-size: 14px; z-index: 6; pointer-events: none; animation: pulseGlow 1.5s infinite ease-in-out; }
+
         /* Controls */
         #controls { position: absolute; bottom: 0; left: 0; width: 100%; height: 40%; display: none; z-index: 5; pointer-events: none; }
         #joystick-zone { position: absolute; left: 0; bottom: 0; width: 50%; height: 100%; pointer-events: auto; }
@@ -61,6 +63,7 @@
 
         /* Animations */
         @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+        @keyframes pulseGlow { 0%, 100% { box-shadow: 0 0 10px #00ffff; } 50% { box-shadow: 0 0 22px #ffffff; } }
         .score-popup { position: absolute; color: #ffea00; font-size: 28px; font-weight: bold; text-shadow: 2px 2px 0 #000; pointer-events: none; animation: floatUp 1.2s forwards ease-out; z-index: 8; }
         @keyframes floatUp { 0% { opacity: 1; transform: translateY(0) scale(0.8); } 50% { transform: translateY(-40px) scale(1.2); } 100% { opacity: 0; transform: translateY(-80px) scale(1); } }
     </style>
@@ -71,8 +74,9 @@
 </head>
 <body>
 
-    <!-- Background Music Audio Tag -->
+    <!-- Background Music Audio Tags -->
     <audio id="bg-music" src="Penguin drop ost.mp3" loop preload="auto"></audio>
+    <audio id="ice-power-music" src="Ice flower Power up ost.mp3" preload="auto"></audio>
 
     <!-- Lobby Menu -->
     <div id="lobby">
@@ -118,6 +122,8 @@
         <div id="leaderboard">Loading scores...</div>
     </div>
 
+    <div id="ice-power-badge">❄️ ICE POWER ACTIVE!</div>
+
     <!-- Controls Overlay -->
     <div id="controls">
         <div id="joystick-zone"></div>
@@ -130,7 +136,7 @@
 
     <!-- PC Hints -->
     <div id="pc-controls-hint">
-        🎮 <strong>PC Controls:</strong> WASD/Arrows = Move | Space = Jump | E = Grab | F = Throw
+        🎮 <strong>PC Controls:</strong> WASD/Arrows = Move | Space = Jump | E = Grab | F = Throw (Iceball when powered)
     </div>
 
     <!-- Game Over Screen -->
@@ -196,13 +202,41 @@
 
         // --- BACKGROUND MUSIC & AUDIO SYSTEM ---
         const bgMusic = document.getElementById('bg-music');
+        const icePowerMusic = document.getElementById('ice-power-music');
+        let isIceMusicPlaying = false;
 
         function startMusic() {
-            if (bgMusic && !isMuted) {
+            if (bgMusic && !isMuted && !isIceMusicPlaying) {
                 bgMusic.volume = 0.4;
-                bgMusic.play().catch(e => {
-                    console.log("Audio play constrained:", e);
-                });
+                bgMusic.play().catch(e => { console.log("Audio play constrained:", e); });
+            }
+        }
+
+        function triggerIcePowerMusic() {
+            if (isMuted) return;
+            isIceMusicPlaying = true;
+            if (bgMusic) bgMusic.pause();
+            if (icePowerMusic) {
+                icePowerMusic.currentTime = 0;
+                icePowerMusic.volume = 0.5;
+                icePowerMusic.play().catch(e => console.log("Ice audio play error:", e));
+            }
+        }
+
+        if (icePowerMusic) {
+            icePowerMusic.onended = () => {
+                deactivateLocalIcePower();
+            };
+        }
+
+        function deactivateLocalIcePower() {
+            isIceMusicPlaying = false;
+            if (gameState.players[myId]) {
+                gameState.players[myId].isIcePowered = false;
+            }
+            document.getElementById('ice-power-badge').style.display = 'none';
+            if (gameState.status === 'playing') {
+                startMusic();
             }
         }
 
@@ -211,9 +245,14 @@
             const btn = document.getElementById('audio-toggle');
             if (isMuted) {
                 if (bgMusic) bgMusic.pause();
+                if (icePowerMusic) icePowerMusic.pause();
                 btn.innerText = '🔇';
             } else {
-                if (bgMusic && gameState.status === 'playing') bgMusic.play();
+                if (isIceMusicPlaying) {
+                    if (icePowerMusic) icePowerMusic.play();
+                } else if (gameState.status === 'playing') {
+                    if (bgMusic) bgMusic.play();
+                }
                 btn.innerText = '🔊';
             }
         }
@@ -245,6 +284,9 @@
             jump: () => playTone(650, 'square', 0.2, 0.12),
             grab: () => playTone(880, 'triangle', 0.15, 0.15),
             throw: () => playTone(350, 'sawtooth', 0.25, 0.15),
+            iceShoot: () => { playTone(1200, 'sine', 0.1, 0.15); setTimeout(() => playTone(1600, 'triangle', 0.15), 50); },
+            freeze: () => { playTone(400, 'square', 0.1, 0.2); setTimeout(() => playTone(200, 'sine', 0.3), 80); },
+            flowerPickup: () => { playTone(523, 'triangle', 0.1); setTimeout(() => playTone(659, 'triangle', 0.1), 80); setTimeout(() => playTone(784, 'triangle', 0.15), 160); setTimeout(() => playTone(1046, 'square', 0.3), 240); },
             fall: () => { playTone(220, 'sawtooth', 0.15); setTimeout(() => playTone(140, 'sawtooth', 0.4), 100); },
             score: () => { playTone(784, 'square', 0.1); setTimeout(() => playTone(1046, 'square', 0.25), 100); },
             splash: () => { playTone(180, 'sine', 0.3, 0.2); },
@@ -267,14 +309,15 @@
         let hostConnection = null;
         
         let gameState = {
-            status: 'lobby', // lobby, playing, end
+            status: 'lobby',
             timeLeft: 120,
-            players: {},
-            penguins: []
+            players: {}, // { id: { x, y, z, score, rotY, name, character, isIcePowered, freezeTimer } }
+            penguins: [],
+            iceFlowers: [], // { id, x, y, z }
+            iceBalls: [] // { id, x, y, z, vx, vz, ownerId }
         };
 
         function generateShortRoomId() {
-            // Generates a clean 5-character alphanumeric uppercase ID
             return Math.random().toString(36).substring(2, 7).toUpperCase();
         }
 
@@ -293,7 +336,7 @@
 
             peer.on('open', id => { 
                 myId = id; 
-                gameState.players[myId] = { x: 0, y: 5, z: 0, score: 0, rotY: 0, name: myName, character: myCharacter, vy: 0 };
+                gameState.players[myId] = { x: 0, y: 5, z: 0, score: 0, rotY: 0, name: myName, character: myCharacter, vy: 0, isIcePowered: false, freezeTimer: 0 };
             });
 
             peer.on('connection', conn => {
@@ -301,7 +344,7 @@
                 connections.push(conn);
                 conn.on('data', data => handleClientInput(conn.peer, data));
                 conn.on('open', () => {
-                    gameState.players[conn.peer] = { x: Math.random()*10-5, y: 5, z: Math.random()*10-5, score: 0, rotY: 0, name: "Connecting...", character: "luigi", vy: 0 };
+                    gameState.players[conn.peer] = { x: Math.random()*10-5, y: 5, z: Math.random()*10-5, score: 0, rotY: 0, name: "Connecting...", character: "luigi", vy: 0, isIcePowered: false, freezeTimer: 0 };
                     updateLobbyUI();
                 });
                 conn.on('close', () => {
@@ -311,9 +354,7 @@
                 });
             });
 
-            peer.on('error', err => {
-                console.error("PeerJS host error:", err);
-            });
+            peer.on('error', err => { console.error("PeerJS host error:", err); });
         }
 
         function joinGame() {
@@ -337,11 +378,19 @@
                         gameState = data.state;
 
                         if(gameState.status === 'playing') {
-                            if(!scene) {
-                                init3D();
-                            }
+                            if(!scene) { init3D(); }
                             if (prevStatus !== 'playing') {
-                                startMusic(); // Start background music ONLY when game starts
+                                startMusic();
+                            }
+                            // Check local player ice power state change
+                            if (gameState.players[myId]) {
+                                if (gameState.players[myId].isIcePowered && !isIceMusicPlaying) {
+                                    triggerIcePowerMusic();
+                                    document.getElementById('ice-power-badge').style.display = 'block';
+                                } else if (!gameState.players[myId].isIcePowered && isIceMusicPlaying) {
+                                    if (icePowerMusic) icePowerMusic.pause();
+                                    deactivateLocalIcePower();
+                                }
                             }
                         }
                         updateUI();
@@ -349,9 +398,7 @@
                 });
             });
 
-            peer.on('error', err => {
-                alert("Could not connect to host. Please verify the Room ID.");
-            });
+            peer.on('error', err => { alert("Could not connect to host. Please verify the Room ID."); });
         }
 
         function updateLobbyUI() {
@@ -369,15 +416,32 @@
                     vx: 0, vy: 0, vz: 0, rotX: 0, rotZ: 0
                 });
             }
+            // Spawn initial Ice Flowers
+            spawnIceFlower();
+            setInterval(() => {
+                if(gameState.status === 'playing' && gameState.iceFlowers.length < 3) {
+                    spawnIceFlower();
+                }
+            }, 12000);
+
             document.getElementById('lobby').style.display = 'none';
             init3D();
-            startMusic(); // Start background music when match begins
+            startMusic();
             
             setInterval(hostGameLoop, 1000 / 30);
             setInterval(() => {
                 if(gameState.timeLeft > 0) gameState.timeLeft--;
                 else if(gameState.timeLeft <= 0 && gameState.status === 'playing') gameState.status = 'end';
             }, 1000);
+        }
+
+        function spawnIceFlower() {
+            gameState.iceFlowers.push({
+                id: Date.now() + Math.random(),
+                x: Math.random()*36 - 18,
+                y: 1.5,
+                z: Math.random()*36 - 18
+            });
         }
 
         function handleClientInput(id, input) {
@@ -412,11 +476,23 @@
                 
                 if(input.character) p.character = input.character;
 
+                // Handle Frozen status
+                if (p.freezeTimer > 0) {
+                    p.freezeTimer -= 1/30;
+                    if (p.freezeTimer <= 0) p.freezeTimer = 0;
+                    return; // Player cannot move or perform actions while frozen!
+                }
+
                 // Player physics & movement
                 p.x += input.moveX * 0.55;
                 p.z += input.moveZ * 0.55;
                 if(input.moveX !== 0 || input.moveZ !== 0) {
                     p.rotY = Math.atan2(input.moveX, input.moveZ);
+                    
+                    // Create Ice Running Trails if powered up
+                    if (p.isIcePowered && Math.random() < 0.4) {
+                        createIceTrailParticles(p.x, p.y - 1.2, p.z);
+                    }
                 }
 
                 // Jump logic
@@ -446,10 +522,51 @@
 
                 // Actions
                 if(input.grab) attemptGrab(id, p);
-                if(input.throw) attemptThrow(id, p);
+                if(input.throw) attemptThrowOrShoot(id, p);
                 
+                // Ice Flower Collisions
+                for (let i = gameState.iceFlowers.length - 1; i >= 0; i--) {
+                    let flower = gameState.iceFlowers[i];
+                    if (Math.hypot(p.x - flower.x, p.z - flower.z) < 2.5) {
+                        p.isIcePowered = true;
+                        gameState.iceFlowers.splice(i, 1);
+                        createScorePopup("❄️ ICE POWER!", p.x, p.z);
+                        if (id === myId) {
+                            sfx.flowerPickup();
+                            triggerIcePowerMusic();
+                            document.getElementById('ice-power-badge').style.display = 'block';
+                        }
+                    }
+                }
+
                 if(id !== myId && p.input) { p.input.jump = false; p.input.grab = false; p.input.throw = false; }
             });
+
+            // Ice Balls physics and player freezing collisions
+            for(let i = gameState.iceBalls.length - 1; i >= 0; i--) {
+                let ball = gameState.iceBalls[i];
+                ball.x += ball.vx;
+                ball.z += ball.vz;
+                ball.life -= 1;
+
+                // Check collision with rival players
+                Object.keys(gameState.players).forEach(targetId => {
+                    if (targetId !== ball.ownerId) {
+                        let target = gameState.players[targetId];
+                        if (Math.hypot(ball.x - target.x, ball.z - target.z) < 2.0) {
+                            target.freezeTimer = 3.5; // Freeze for 3.5 seconds
+                            createIceBlockParticles(target.x, target.y, target.z);
+                            createScorePopup("🧊 FROZEN!", target.x, target.z);
+                            sfx.freeze();
+                            ball.life = 0; // Destroy ice ball
+                        }
+                    }
+                });
+
+                if (ball.life <= 0 || Math.hypot(ball.x, ball.z) > MOUNTAIN_RADIUS + 10) {
+                    gameState.iceBalls.splice(i, 1);
+                }
+            }
 
             // Penguin Physics
             gameState.penguins.forEach(pg => {
@@ -476,7 +593,6 @@
                         if(pg.vz) { pg.vz *= 0.82; if(Math.abs(pg.vz) < 0.05) pg.vz = 0; }
                     }
 
-                    // Penguin Drop Off Mountain Scoring
                     if(Math.hypot(pg.x, pg.z) > MOUNTAIN_RADIUS) {
                         pg.y -= 0.8;
                         if(pg.y < -25) {
@@ -518,7 +634,7 @@
             }
         }
 
-        function attemptThrow(playerId, playerData) {
+        function attemptThrowOrShoot(playerId, playerData) {
             let holding = gameState.penguins.find(p => p.heldBy === playerId);
             if(holding) {
                 holding.heldBy = null;
@@ -527,6 +643,20 @@
                 holding.vy = 1.6; 
                 holding.vz = Math.cos(playerData.rotY) * throwSpeed;
                 if(playerId === myId) sfx.throw();
+            } else if (playerData.isIcePowered) {
+                // Shoot Iceball ❄️
+                let speed = 1.8;
+                gameState.iceBalls.push({
+                    id: Date.now() + Math.random(),
+                    x: playerData.x + Math.sin(playerData.rotY)*1.5,
+                    y: playerData.y + 0.5,
+                    z: playerData.z + Math.cos(playerData.rotY)*1.5,
+                    vx: Math.sin(playerData.rotY) * speed,
+                    vz: Math.cos(playerData.rotY) * speed,
+                    ownerId: playerId,
+                    life: 60
+                });
+                sfx.iceShoot();
             }
         }
 
@@ -537,7 +667,6 @@
             canvas.height = 64;
             const ctx = canvas.getContext('2d');
             
-            // Draw background pill badge
             ctx.fillStyle = 'rgba(8, 20, 38, 0.75)';
             ctx.beginPath();
             if (ctx.roundRect) {
@@ -550,7 +679,6 @@
             ctx.lineWidth = 3;
             ctx.stroke();
 
-            // Text
             ctx.font = 'Bold 22px "Courier New", monospace';
             ctx.fillStyle = '#ffffff';
             ctx.textAlign = 'center';
@@ -561,17 +689,26 @@
             const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
             const sprite = new THREE.Sprite(spriteMaterial);
             sprite.scale.set(4, 1, 1);
-            sprite.position.set(0, 3.2, 0); // Elevated above character head
+            sprite.position.set(0, 3.4, 0);
             return sprite;
         }
 
         // --- 3D VOXEL MESH BUILDERS & ANIMATION NODES ---
-        function createCharacterMesh(type) {
+        function createCharacterMesh(type, isIcePowered = false) {
             const charGroup = new THREE.Group();
             const isLuigi = (type === 'luigi');
             
-            const colorPrimary = isLuigi ? 0x00a200 : 0xe42400;
-            const colorSecondary = isLuigi ? 0x001a70 : 0x002494;
+            // Standard vs Ice Power Color Swaps
+            let colorPrimary = isLuigi ? 0x00a200 : 0xe42400; 
+            let colorSecondary = isLuigi ? 0x001a70 : 0x002494;
+
+            if (isIcePowered) {
+                // Ice Mario: Light Blue Shirt/Hat + Red Overalls
+                // Ice Luigi: Light Blue Shirt/Hat + Green Overalls
+                colorPrimary = 0xa0f0ff; // Ice Light Blue
+                colorSecondary = isLuigi ? 0x00a200 : 0xe42400;
+            }
+
             const colorHair = isLuigi ? 0x542a00 : 0x843400;
             
             const matPrimary = new THREE.MeshLambertMaterial({ color: colorPrimary });
@@ -582,14 +719,12 @@
             const matWhite = new THREE.MeshBasicMaterial({ color: 0xffffff });
             const matBlack = new THREE.MeshBasicMaterial({ color: 0x000000 });
 
-            // Nodes for walking animations
             const leftLegGroup = new THREE.Group();
             const rightLegGroup = new THREE.Group();
             const leftArmGroup = new THREE.Group();
             const rightArmGroup = new THREE.Group();
             const bodyGroup = new THREE.Group();
 
-            // Shoes & Legs
             const shoeGeo = new THREE.BoxGeometry(0.32, 0.22, 0.45);
             const legGeo = new THREE.BoxGeometry(0.28, 0.35, 0.35);
 
@@ -603,13 +738,11 @@
             rightLegGroup.add(shoeR, legR);
             rightLegGroup.position.set(0.24, 0, 0);
 
-            // Torso
             const torso = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.5, 0.42), matSecondary);
             torso.position.set(0, 0.72, 0);
             const chestRed = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.5, 0.44), matPrimary);
             chestRed.position.set(0, 0.72, 0);
             
-            // Buttons
             const btnLeft = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.08), matYellow);
             btnLeft.position.set(-0.15, 0.68, 0.22);
             const btnRight = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.08), matYellow);
@@ -617,7 +750,6 @@
 
             bodyGroup.add(torso, chestRed, btnLeft, btnRight);
 
-            // Arms
             const armGeo = new THREE.BoxGeometry(0.22, 0.42, 0.22);
             const handGeo = new THREE.BoxGeometry(0.24, 0.2, 0.24);
 
@@ -631,7 +763,6 @@
             rightArmGroup.add(armR, handR);
             rightArmGroup.position.set(0.46, 0.85, 0);
 
-            // Head & Cap
             const head = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.52, 0.52), matSkin);
             head.position.set(0, 1.22, 0);
             const hair = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.3, 0.2), matBrown);
@@ -655,6 +786,24 @@
 
             bodyGroup.add(head, hair, nose, stache, eyeL, eyeR, cap, brim, emblem);
 
+            // Bluish Aura Glow Sphere for Powered Character
+            const glowMesh = new THREE.Mesh(
+                new THREE.SphereGeometry(1.6, 16, 16),
+                new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.25, side: THREE.BackSide })
+            );
+            glowMesh.position.y = 1.0;
+            glowMesh.visible = isIcePowered;
+            charGroup.add(glowMesh);
+
+            // Ice Block for Frozen State
+            const iceBlock = new THREE.Mesh(
+                new THREE.BoxGeometry(1.8, 2.6, 1.8),
+                new THREE.MeshPhongMaterial({ color: 0x88e0ff, transparent: true, opacity: 0.75, shininess: 90 })
+            );
+            iceBlock.position.y = 1.1;
+            iceBlock.visible = false;
+            charGroup.add(iceBlock);
+
             charGroup.add(leftLegGroup, rightLegGroup, leftArmGroup, rightArmGroup, bodyGroup);
 
             charGroup.traverse(child => {
@@ -672,10 +821,39 @@
                 rightLeg: rightLegGroup,
                 leftArm: leftArmGroup,
                 rightArm: rightArmGroup,
-                body: bodyGroup
+                body: bodyGroup,
+                glowMesh: glowMesh,
+                iceBlock: iceBlock
             };
 
             return charGroup;
+        }
+
+        // --- 3D ICE FLOWER ITEM MESH ---
+        function createIceFlowerMesh() {
+            const group = new THREE.Group();
+            
+            // Stem & Leaves
+            const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.8), new THREE.MeshLambertMaterial({ color: 0x00cc66 }));
+            stem.position.y = 0.4;
+            group.add(stem);
+
+            // Petals
+            const petalMat = new THREE.MeshPhongMaterial({ color: 0x80eeff, shininess: 80 });
+            for(let i=0; i<5; i++) {
+                const petal = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 8), petalMat);
+                const angle = (i/5) * Math.PI * 2;
+                petal.position.set(Math.cos(angle)*0.35, 0.85, Math.sin(angle)*0.35);
+                group.add(petal);
+            }
+
+            // Center Face
+            const center = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 12), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+            center.position.set(0, 0.85, 0);
+            group.add(center);
+
+            group.position.y = 0.5;
+            return group;
         }
 
         function createPenguinMesh() {
@@ -793,12 +971,33 @@
                     new THREE.MeshBasicMaterial({ color: 0x88e0ff, transparent: true })
                 );
                 p.position.set(x, y, z);
-                p.userData = {
-                    vx: (Math.random()-0.5)*1.2,
-                    vy: Math.random()*1.5 + 0.5,
-                    vz: (Math.random()-0.5)*1.2,
-                    life: 1.0
-                };
+                p.userData = { vx: (Math.random()-0.5)*1.2, vy: Math.random()*1.5 + 0.5, vz: (Math.random()-0.5)*1.2, life: 1.0 };
+                scene.add(p);
+                particlesList.push(p);
+            }
+        }
+
+        function createIceTrailParticles(x, y, z) {
+            for(let i=0; i<2; i++) {
+                const p = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.2, 6, 6),
+                    new THREE.MeshBasicMaterial({ color: 0xb0f0ff, transparent: true })
+                );
+                p.position.set(x + (Math.random()-0.5)*0.8, y, z + (Math.random()-0.5)*0.8);
+                p.userData = { vx: (Math.random()-0.5)*0.2, vy: Math.random()*0.3, vz: (Math.random()-0.5)*0.2, life: 0.8 };
+                scene.add(p);
+                particlesList.push(p);
+            }
+        }
+
+        function createIceBlockParticles(x, y, z) {
+            for(let i=0; i<18; i++) {
+                const p = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.4, 0.4, 0.4),
+                    new THREE.MeshPhongMaterial({ color: 0x00ffff, transparent: true })
+                );
+                p.position.set(x, y + 0.5, z);
+                p.userData = { vx: (Math.random()-0.5)*1.5, vy: Math.random()*1.2, vz: (Math.random()-0.5)*1.5, life: 1.0 };
                 scene.add(p);
                 particlesList.push(p);
             }
@@ -825,6 +1024,8 @@
         let scene, camera, renderer, envData;
         let playerMeshes = {};
         let penguinMeshes = {};
+        let flowerMeshes = {};
+        let iceBallMeshes = {};
         let animClock = 0;
 
         function init3D() {
@@ -945,16 +1146,18 @@
                 }
             }
 
-            // Sync players, name tags & walking animations
+            // Sync players, name tags, clothing colors & animations
             Object.keys(gameState.players).forEach(id => {
                 let pData = gameState.players[id];
                 let charType = pData.character || 'mario';
                 let pName = pData.name || 'Player';
+                let isIcePowered = !!pData.isIcePowered;
 
-                if(!playerMeshes[id] || playerMeshes[id].userData.characterType !== charType) {
+                if(!playerMeshes[id] || playerMeshes[id].userData.characterType !== charType || playerMeshes[id].userData.isIcePowered !== isIcePowered) {
                     if(playerMeshes[id]) scene.remove(playerMeshes[id]);
-                    let mesh = createCharacterMesh(charType);
+                    let mesh = createCharacterMesh(charType, isIcePowered);
                     mesh.userData.characterType = charType;
+                    mesh.userData.isIcePowered = isIcePowered;
                     scene.add(mesh);
                     playerMeshes[id] = mesh;
                 }
@@ -962,6 +1165,10 @@
                 let mesh = playerMeshes[id];
                 mesh.position.set(pData.x, pData.y - 1.5, pData.z);
                 mesh.rotation.y = pData.rotY;
+
+                // Toggle Glow & Freeze Block Visibilities
+                if (mesh.userData.glowMesh) mesh.userData.glowMesh.visible = isIcePowered;
+                if (mesh.userData.iceBlock) mesh.userData.iceBlock.visible = (pData.freezeTimer > 0);
 
                 // Create or Update Floating Overhead Name Tag
                 if (!mesh.userData.nameTag || mesh.userData.playerName !== pName) {
@@ -975,7 +1182,7 @@
                 // Procedural Walk Cycle
                 const isMoving = (id === myId) ? (myInput.moveX !== 0 || myInput.moveZ !== 0) : true;
                 const u = mesh.userData;
-                if(isMoving && pData.y <= 1.6) {
+                if(isMoving && pData.y <= 1.6 && pData.freezeTimer <= 0) {
                     const walkFreq = animClock * 12;
                     u.leftLeg.rotation.x = Math.sin(walkFreq) * 0.7;
                     u.rightLeg.rotation.x = -Math.sin(walkFreq) * 0.7;
@@ -990,7 +1197,6 @@
                     u.body.position.y = 0;
                 }
 
-                // Jump stretch
                 if(pData.vy > 0) {
                     mesh.scale.set(1.2, 1.8, 1.2);
                 } else {
@@ -1001,6 +1207,45 @@
             // Clean up removed players
             Object.keys(playerMeshes).forEach(id => {
                 if(!gameState.players[id]) { scene.remove(playerMeshes[id]); delete playerMeshes[id]; }
+            });
+
+            // Ice Flowers Sync
+            gameState.iceFlowers.forEach(flower => {
+                if(!flowerMeshes[flower.id]) {
+                    let mesh = createIceFlowerMesh();
+                    scene.add(mesh);
+                    flowerMeshes[flower.id] = mesh;
+                }
+                let fMesh = flowerMeshes[flower.id];
+                fMesh.position.set(flower.x, flower.y, flower.z);
+                fMesh.rotation.y = animClock * 2;
+            });
+            Object.keys(flowerMeshes).forEach(fId => {
+                if(!gameState.iceFlowers.find(f => f.id == fId)) {
+                    scene.remove(flowerMeshes[fId]);
+                    delete flowerMeshes[fId];
+                }
+            });
+
+            // Ice Balls Sync
+            gameState.iceBalls.forEach(ball => {
+                if(!iceBallMeshes[ball.id]) {
+                    let mesh = new THREE.Mesh(
+                        new THREE.SphereGeometry(0.5, 12, 12),
+                        new THREE.MeshPhongMaterial({ color: 0x88e0ff, emissive: 0x00aaff, shininess: 100 })
+                    );
+                    scene.add(mesh);
+                    iceBallMeshes[ball.id] = mesh;
+                }
+                let bMesh = iceBallMeshes[ball.id];
+                bMesh.position.set(ball.x, ball.y, ball.z);
+                bMesh.rotation.x += 0.3;
+            });
+            Object.keys(iceBallMeshes).forEach(bId => {
+                if(!gameState.iceBalls.find(b => b.id == bId)) {
+                    scene.remove(iceBallMeshes[bId]);
+                    delete iceBallMeshes[bId];
+                }
             });
 
             // Penguins animation & sync
