@@ -81,7 +81,7 @@
         <div class="panel" id="main-panel">
             <div class="player-info">
                 <p style="margin: 0 0 6px 0; font-size: 13px; color: #88ccff;">YOUR NAME:</p>
-                <input type="text" id="player-name" placeholder="e.g. IceMaster" maxlength="12" style="text-transform:none;">
+                <input type="text" id="player-name" placeholder="e.g. IceMaster" maxlength="12" style="text-transform: none;">
                 
                 <p style="margin-top: 15px; margin-bottom: 6px; font-size: 13px; color: #00ffff;">CHOOSE CHARACTER:</p>
                 <div style="display: flex; gap: 10px; justify-content: center; margin-bottom: 12px;">
@@ -95,16 +95,16 @@
 
             <button type="button" onclick="hostGame()">Host Game Room</button>
             <p style="margin: 8px 0; color: #888;">— OR —</p>
-            <input type="text" id="join-id" placeholder="ENTER 4-LETTER ROOM CODE" maxlength="4">
+            <input type="text" id="join-id" placeholder="Enter Room ID (5 Chars)" maxlength="5">
             <button type="button" onclick="joinGame()" style="background: #00ffaa; box-shadow: 0 4px 0 #00aa66;">Join Game Room</button>
         </div>
 
         <div class="panel" id="host-panel" style="display:none;">
             <h3 style="margin-top:0; color:#00ffff;">ROOM CREATED</h3>
-            <p style="font-size:16px;">ROOM CODE: <span id="room-id" style="color:#ffea00; font-weight:bold; font-size:24px; letter-spacing:3px;">Loading...</span></p>
+            <p style="font-size:16px;">Room ID: <span id="room-id" style="color:#ffea00; font-weight:bold; letter-spacing: 2px; font-size: 22px;">Loading...</span></p>
             <div id="qrcode"></div>
             <p style="font-size:15px;">Players: <span id="player-count">1</span>/10</p>
-            <p style="font-size:12px; color:#aaa;">(Minimum 2 players required to start multiplayer)</p>
+            <p style="font-size:12px; color:#aaa;">(Minimum 2 players required to start match)</p>
             <button type="button" id="btn-start" disabled onclick="startGame()">START MATCH</button>
         </div>
     </div>
@@ -201,7 +201,7 @@
             if (bgMusic && !isMuted) {
                 bgMusic.volume = 0.4;
                 bgMusic.play().catch(e => {
-                    console.log("Audio autoplay constrained until interaction:", e);
+                    console.log("Audio play constrained:", e);
                 });
             }
         }
@@ -213,7 +213,7 @@
                 if (bgMusic) bgMusic.pause();
                 btn.innerText = '🔇';
             } else {
-                if (bgMusic) bgMusic.play();
+                if (bgMusic && gameState.status === 'playing') bgMusic.play();
                 btn.innerText = '🔊';
             }
         }
@@ -223,7 +223,6 @@
         function initAudio() {
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             if (audioCtx.state === 'suspended') audioCtx.resume();
-            startMusic();
         }
 
         function playTone(freq, type, duration, vol = 0.1) {
@@ -260,20 +259,9 @@
             }
         };
 
-        // --- HELPER FOR SHORT ROOM CODES ---
-        function generateShortRoomId() {
-            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-            let code = '';
-            for(let i = 0; i < 4; i++) {
-                code += chars.charAt(Math.floor(Math.random() * chars.length));
-            }
-            return code;
-        }
-
         // --- MULTIPLAYER & PEERJS STATE ---
         let peer = null;
         let myId = null;
-        let shortRoomCode = '';
         let isHost = false;
         let connections = [];
         let hostConnection = null;
@@ -285,34 +273,27 @@
             penguins: []
         };
 
+        function generateShortRoomId() {
+            // Generates a clean 5-character alphanumeric uppercase ID
+            return Math.random().toString(36).substring(2, 7).toUpperCase();
+        }
+
         function hostGame() {
             savePlayerConfig();
             initAudio();
             isHost = true;
+            document.getElementById('main-panel').style.display = 'none';
+            document.getElementById('host-panel').style.display = 'block';
             
-            shortRoomCode = generateShortRoomId();
-            const fullPeerId = 'pd3d-' + shortRoomCode;
+            const shortRoomId = generateShortRoomId();
+            document.getElementById('room-id').innerText = shortRoomId;
+            new QRCode(document.getElementById("qrcode"), { text: shortRoomId, width: 128, height: 128 });
 
-            peer = new Peer(fullPeerId);
+            peer = new Peer(shortRoomId);
 
             peer.on('open', id => { 
                 myId = id; 
-                document.getElementById('main-panel').style.display = 'none';
-                document.getElementById('host-panel').style.display = 'block';
-                document.getElementById('room-id').innerText = shortRoomCode;
-                new QRCode(document.getElementById("qrcode"), { text: shortRoomCode, width: 128, height: 128 });
-                
                 gameState.players[myId] = { x: 0, y: 5, z: 0, score: 0, rotY: 0, name: myName, character: myCharacter, vy: 0 };
-            });
-
-            peer.on('error', err => {
-                if(err.type === 'unavailable-id') {
-                    // Retry with a new short code if collision occurs
-                    peer.destroy();
-                    hostGame();
-                } else {
-                    alert("Connection error: " + err.type);
-                }
             });
 
             peer.on('connection', conn => {
@@ -329,38 +310,47 @@
                     updateLobbyUI();
                 });
             });
+
+            peer.on('error', err => {
+                console.error("PeerJS host error:", err);
+            });
         }
 
         function joinGame() {
             savePlayerConfig();
             initAudio();
-            const rawCode = document.getElementById('join-id').value.trim().toUpperCase();
-            if(!rawCode || rawCode.length < 3) return alert('Please enter a valid 4-letter Room Code');
+            const hostId = document.getElementById('join-id').value.trim().toUpperCase();
+            if(!hostId) return alert('Please enter a valid 5-character Room ID');
             
-            const targetPeerId = 'pd3d-' + rawCode;
             peer = new Peer();
-
             peer.on('open', id => {
                 myId = id;
-                hostConnection = peer.connect(targetPeerId);
+                hostConnection = peer.connect(hostId);
                 
                 hostConnection.on('open', () => {
-                    document.getElementById('lobby').innerHTML = "<h2 style='color:#00ffff;'>Connected! Waiting for Host to start...</h2>";
+                    document.getElementById('lobby').innerHTML = "<h2 style='color:#00ffff;'>Connected! Waiting for Host to start match...</h2>";
                 });
+
                 hostConnection.on('data', data => {
                     if(data.type === 'update') {
+                        let prevStatus = gameState.status;
                         gameState = data.state;
-                        if(gameState.status === 'playing' && !scene) init3D();
+
+                        if(gameState.status === 'playing') {
+                            if(!scene) {
+                                init3D();
+                            }
+                            if (prevStatus !== 'playing') {
+                                startMusic(); // Start background music ONLY when game starts
+                            }
+                        }
                         updateUI();
                     }
-                });
-                hostConnection.on('error', () => {
-                    alert("Could not connect to room code: " + rawCode);
                 });
             });
 
             peer.on('error', err => {
-                alert("Room not found or connection failed.");
+                alert("Could not connect to host. Please verify the Room ID.");
             });
         }
 
@@ -381,6 +371,7 @@
             }
             document.getElementById('lobby').style.display = 'none';
             init3D();
+            startMusic(); // Start background music when match begins
             
             setInterval(hostGameLoop, 1000 / 30);
             setInterval(() => {
@@ -475,7 +466,6 @@
                     if(pg.vz) pg.z += pg.vz;
                     if(pg.vy !== undefined) { pg.y += pg.vy; pg.vy -= 0.08; }
                     
-                    // Rotations during flight
                     if(Math.abs(pg.vx) > 0.1 || Math.abs(pg.vz) > 0.1) {
                         pg.rotX = (pg.rotX || 0) + 0.2;
                     }
@@ -496,7 +486,6 @@
                                 createScorePopup("+1 DROP!", pg.x, pg.z);
                                 if(pg.lastHeldBy === myId) { sfx.score(); sfx.splash(); }
                             }
-                            // Respawn penguin
                             pg.x = Math.random()*30-15; pg.y = 12; pg.z = Math.random()*30-15;
                             pg.vx = 0; pg.vy = 0; pg.vz = 0; pg.lastHeldBy = null; pg.rotX = 0;
                         }
@@ -541,46 +530,43 @@
             }
         }
 
-        // --- DYNAMIC 3D CANVAS NAME TAG CREATOR ---
-        function createNameTagSprite(name, isSelf) {
+        // --- 3D PLAYER NAME TAG SPRITE CREATOR ---
+        function createNameTagSprite(name) {
             const canvas = document.createElement('canvas');
-            canvas.width = 512;
-            canvas.height = 128;
+            canvas.width = 256;
+            canvas.height = 64;
             const ctx = canvas.getContext('2d');
-
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // Background Badge
-            ctx.fillStyle = isSelf ? 'rgba(0, 255, 170, 0.85)' : 'rgba(10, 25, 45, 0.85)';
-            ctx.strokeStyle = '#00ffff';
-            ctx.lineWidth = 6;
-            
-            const radius = 24;
+            // Draw background pill badge
+            ctx.fillStyle = 'rgba(8, 20, 38, 0.75)';
             ctx.beginPath();
-            ctx.roundRect(16, 16, canvas.width - 32, canvas.height - 32, radius);
+            if (ctx.roundRect) {
+                ctx.roundRect(8, 8, 240, 48, 12);
+            } else {
+                ctx.rect(8, 8, 240, 48);
+            }
             ctx.fill();
+            ctx.strokeStyle = '#00ffff';
+            ctx.lineWidth = 3;
             ctx.stroke();
 
-            // Name Text
-            ctx.font = 'bold 44px "Courier New", monospace';
+            // Text
+            ctx.font = 'Bold 22px "Courier New", monospace';
+            ctx.fillStyle = '#ffffff';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillStyle = isSelf ? '#000000' : '#ffffff';
-            ctx.fillText(name, canvas.width / 2, canvas.height / 2);
+            ctx.fillText(name, 128, 32);
 
             const texture = new THREE.CanvasTexture(canvas);
-            texture.needsUpdate = true;
-            
-            const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
+            const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
             const sprite = new THREE.Sprite(spriteMaterial);
-            sprite.scale.set(4.5, 1.125, 1);
-            sprite.position.set(0, 3.2, 0); // Position above character's head
-            
+            sprite.scale.set(4, 1, 1);
+            sprite.position.set(0, 3.2, 0); // Elevated above character head
             return sprite;
         }
 
         // --- 3D VOXEL MESH BUILDERS & ANIMATION NODES ---
-        function createCharacterMesh(type, name, isSelf) {
+        function createCharacterMesh(type) {
             const charGroup = new THREE.Group();
             const isLuigi = (type === 'luigi');
             
@@ -671,10 +657,6 @@
 
             charGroup.add(leftLegGroup, rightLegGroup, leftArmGroup, rightArmGroup, bodyGroup);
 
-            // Floating Name Tag Sprite
-            const nameTag = createNameTagSprite(name || 'Player', isSelf);
-            charGroup.add(nameTag);
-
             charGroup.traverse(child => {
                 if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; }
             });
@@ -685,15 +667,12 @@
                 charGroup.scale.set(1.5, 1.5, 1.5);
             }
 
-            // Expose animators
             charGroup.userData = {
                 leftLeg: leftLegGroup,
                 rightLeg: rightLegGroup,
                 leftArm: leftArmGroup,
                 rightArm: rightArmGroup,
-                body: bodyGroup,
-                nameTag: nameTag,
-                playerName: name
+                body: bodyGroup
             };
 
             return charGroup;
@@ -755,7 +734,6 @@
 
         // --- OCEAN WATER & ENVIRONMENT CREATION ---
         function createEnvironment(scene) {
-            // Ice Mountain Platform
             const geoMountain = new THREE.CylinderGeometry(MOUNTAIN_RADIUS, MOUNTAIN_RADIUS + 18, 20, 48);
             const matMountain = new THREE.MeshPhongMaterial({ color: 0xd6f1ff, flatShading: true, shininess: 30 });
             const mountain = new THREE.Mesh(geoMountain, matMountain);
@@ -763,7 +741,6 @@
             mountain.receiveShadow = true;
             scene.add(mountain);
 
-            // Ocean Water Plane
             const geoWater = new THREE.PlaneGeometry(1000, 1000, 32, 32);
             const matWater = new THREE.MeshPhongMaterial({ 
                 color: 0x0066aa, 
@@ -777,7 +754,6 @@
             water.position.y = -22;
             scene.add(water);
 
-            // Floating Icebergs around ocean
             for(let i = 0; i < 12; i++) {
                 const iceSize = Math.random() * 15 + 10;
                 const iceberg = new THREE.Mesh(
@@ -791,7 +767,6 @@
                 scene.add(iceberg);
             }
 
-            // Falling Snow Particles
             const snowGeo = new THREE.BufferGeometry();
             const snowCount = 400;
             const posArray = new Float32Array(snowCount * 3);
@@ -834,7 +809,6 @@
             popup.className = 'score-popup';
             popup.innerText = text;
             
-            // Convert 3D world coord to 2D screen coord
             const vector = new THREE.Vector3(worldX, 0, worldZ);
             vector.project(camera);
             const x = (vector.x * .5 + .5) * window.innerWidth;
@@ -889,7 +863,6 @@
 
             envData = createEnvironment(scene);
 
-            // Joystick setup
             const manager = nipplejs.create({
                 zone: document.getElementById('joystick-zone'),
                 mode: 'static', position: { left: '40%', bottom: '40%' }, color: '#00ffff'
@@ -901,12 +874,10 @@
             });
             manager.on('end', () => { myInput.moveX = 0; myInput.moveZ = 0; });
 
-            // On-screen Touch Controls
             document.getElementById('btn-jump').addEventListener('touchstart', (e)=>{ e.preventDefault(); myInput.jump = true; sfx.jump(); });
             document.getElementById('btn-grab').addEventListener('touchstart', (e)=>{ e.preventDefault(); myInput.grab = true; });
             document.getElementById('btn-throw').addEventListener('touchstart', (e)=>{ e.preventDefault(); myInput.throw = true; });
 
-            // Keyboard Listeners
             const keysPressed = {};
             window.addEventListener('keydown', (e) => {
                 keysPressed[e.code] = true;
@@ -950,7 +921,6 @@
 
             animClock += 0.05;
 
-            // Environment animations
             if(envData) {
                 envData.water.position.y = -22 + Math.sin(animClock * 0.5) * 0.4;
                 const pos = envData.snowParticles.geometry.attributes.position.array;
@@ -961,7 +931,6 @@
                 envData.snowParticles.geometry.attributes.position.needsUpdate = true;
             }
 
-            // Particles update
             for(let i = particlesList.length - 1; i >= 0; i--) {
                 const p = particlesList[i];
                 p.position.x += p.userData.vx;
@@ -976,16 +945,15 @@
                 }
             }
 
-            // Players sync & procedural walking animations
+            // Sync players, name tags & walking animations
             Object.keys(gameState.players).forEach(id => {
                 let pData = gameState.players[id];
                 let charType = pData.character || 'mario';
                 let pName = pData.name || 'Player';
-                let isSelf = (id === myId);
 
                 if(!playerMeshes[id] || playerMeshes[id].userData.characterType !== charType) {
                     if(playerMeshes[id]) scene.remove(playerMeshes[id]);
-                    let mesh = createCharacterMesh(charType, pName, isSelf);
+                    let mesh = createCharacterMesh(charType);
                     mesh.userData.characterType = charType;
                     scene.add(mesh);
                     playerMeshes[id] = mesh;
@@ -995,12 +963,12 @@
                 mesh.position.set(pData.x, pData.y - 1.5, pData.z);
                 mesh.rotation.y = pData.rotY;
 
-                // Update Name Tag if name changed
-                if(mesh.userData.playerName !== pName) {
-                    mesh.remove(mesh.userData.nameTag);
-                    const newTag = createNameTagSprite(pName, isSelf);
-                    mesh.add(newTag);
-                    mesh.userData.nameTag = newTag;
+                // Create or Update Floating Overhead Name Tag
+                if (!mesh.userData.nameTag || mesh.userData.playerName !== pName) {
+                    if (mesh.userData.nameTag) mesh.remove(mesh.userData.nameTag);
+                    const nameTagSprite = createNameTagSprite(pName);
+                    mesh.add(nameTagSprite);
+                    mesh.userData.nameTag = nameTagSprite;
                     mesh.userData.playerName = pName;
                 }
 
@@ -1048,22 +1016,21 @@
                 if(pg.rotX) pMesh.rotation.x = pg.rotX; else pMesh.rotation.x = 0;
                 if(pg.rotY) pMesh.rotation.y = pg.rotY;
 
-                // Waddling & Wing Flapping Animation
                 const u = pMesh.userData;
                 if(pg.heldBy) {
                     u.flipperL.rotation.z = Math.PI / 3 + Math.sin(animClock * 15) * 0.3;
                     u.flipperR.rotation.z = -Math.PI / 3 - Math.sin(animClock * 15) * 0.3;
-                } else if(pg.y > 1.2) { // Flight
+                } else if(pg.y > 1.2) {
                     u.flipperL.rotation.z = Math.sin(animClock * 20) * 0.6;
                     u.flipperR.rotation.z = -Math.sin(animClock * 20) * 0.6;
-                } else { // Idle Waddling
+                } else {
                     pMesh.rotation.z = Math.sin(animClock * 4) * 0.1;
                     u.flipperL.rotation.z = 0.1;
                     u.flipperR.rotation.z = -0.1;
                 }
             });
 
-            // Camera follow with smooth lerp
+            // Smooth Camera tracking
             if(gameState.players[myId] && playerMeshes[myId]) {
                 const myPos = playerMeshes[myId].position;
                 const targetCamX = myPos.x;
