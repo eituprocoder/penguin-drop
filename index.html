@@ -87,9 +87,15 @@
                 <input type="text" id="player-name" placeholder="e.g. IceMaster" maxlength="12" style="text-transform: none;">
                 
                 <p style="margin-top: 15px; margin-bottom: 6px; font-size: 13px; color: #00ffff;">CHOOSE CHARACTER:</p>
+                <div style="display: flex; gap: 10px; justify-content: center; margin-bottom: 6px;">
+                    <button id="btn-mario" type="button" onclick="selectCharacter('mario')" style="flex: 1; padding: 10px; font-size: 12px; background: #e42400; color: white; border: 2px solid white;">Mario 🔴</button>
+                    <button id="btn-luigi" type="button" onclick="selectCharacter('luigi')" style="flex: 1; padding: 10px; font-size: 12px; background: #444; color: #aaa; border: 2px solid transparent;">Luigi 🟢</button>
+                    <button id="btn-peach" type="button" onclick="selectCharacter('peach')" style="flex: 1; padding: 10px; font-size: 12px; background: #444; color: #aaa; border: 2px solid transparent;">Peach 👑</button>
+                </div>
                 <div style="display: flex; gap: 10px; justify-content: center; margin-bottom: 12px;">
-                    <button id="btn-mario" type="button" onclick="selectCharacter('mario')" style="flex: 1; padding: 10px; font-size: 13px; background: #e42400; color: white; border: 2px solid white;">Mario 🔴</button>
-                    <button id="btn-luigi" type="button" onclick="selectCharacter('luigi')" style="flex: 1; padding: 10px; font-size: 13px; background: #444; color: #aaa; border: 2px solid transparent;">Luigi 🟢</button>
+                    <button id="btn-toad" type="button" onclick="selectCharacter('toad')" style="flex: 1; padding: 10px; font-size: 12px; background: #444; color: #aaa; border: 2px solid transparent;">Toad 🍄</button>
+                    <button id="btn-wario" type="button" onclick="selectCharacter('wario')" style="flex: 1; padding: 10px; font-size: 12px; background: #444; color: #aaa; border: 2px solid transparent;">Wario 🟡</button>
+                    <button id="btn-waluigi" type="button" onclick="selectCharacter('waluigi')" style="flex: 1; padding: 10px; font-size: 12px; background: #444; color: #aaa; border: 2px solid transparent;">Waluigi 🟣</button>
                 </div>
 
                 <div id="trophy-display">Trophies: <span id="lobby-trophies">0</span> 🏆</div>
@@ -115,7 +121,7 @@
     <!-- HUD Overlay -->
     <div id="ui">
         <div style="display: flex; align-items: center;">
-            <div id="timer">02:00</div>
+            <div id="timer">05:00</div>
         </div>
         <div id="leaderboard">Loading scores...</div>
     </div>
@@ -168,27 +174,32 @@
             localStorage.setItem('pd_character', char);
             myInput.character = char;
             
-            const btnMario = document.getElementById('btn-mario');
-            const btnLuigi = document.getElementById('btn-luigi');
-            
-            if (char === 'mario') {
-                btnMario.style.background = '#e42400';
-                btnMario.style.color = 'white';
-                btnMario.style.border = '2px solid white';
-                
-                btnLuigi.style.background = '#444';
-                btnLuigi.style.color = '#aaa';
-                btnLuigi.style.border = '2px solid transparent';
-            } else {
-                btnLuigi.style.background = '#00a200';
-                btnLuigi.style.color = 'white';
-                btnLuigi.style.border = '2px solid white';
-                
-                btnMario.style.background = '#444';
-                btnMario.style.color = '#aaa';
-                btnMario.style.border = '2px solid transparent';
-            }
+            const chars = ['mario', 'luigi', 'peach', 'toad', 'wario', 'waluigi'];
+            const colors = {
+                mario: { bg: '#e42400', text: 'white' },
+                luigi: { bg: '#00a200', text: 'white' },
+                peach: { bg: '#ff88aa', text: 'black' },
+                toad: { bg: '#ffffff', text: 'black' },
+                wario: { bg: '#ffcc00', text: 'black' },
+                waluigi: { bg: '#6600cc', text: 'white' }
+            };
+
+            chars.forEach(c => {
+                const btn = document.getElementById('btn-' + c);
+                if (btn) {
+                    if (c === char) {
+                        btn.style.background = colors[c].bg;
+                        btn.style.color = colors[c].text;
+                        btn.style.border = '2px solid white';
+                    } else {
+                        btn.style.background = '#444';
+                        btn.style.color = '#aaa';
+                        btn.style.border = '2px solid transparent';
+                    }
+                }
+            });
         }
+        // Initialize active character button styling
         selectCharacter(myCharacter);
 
         function savePlayerConfig() {
@@ -244,14 +255,14 @@
             if (isMuted) {
                 if (bgMusic) bgMusic.pause();
                 if (icePowerMusic) icePowerMusic.pause();
-                btn.innerText = '🔇';
+                if (btn) btn.innerText = '🔇';
             } else {
                 if (isIceMusicPlaying) {
                     if (icePowerMusic) icePowerMusic.play();
                 } else if (gameState.status === 'playing') {
                     if (bgMusic) bgMusic.play();
                 }
-                btn.innerText = '🔊';
+                if (btn) btn.innerText = '🔊';
             }
         }
 
@@ -308,7 +319,7 @@
         
         let gameState = {
             status: 'lobby',
-            timeLeft: 120,
+            timeLeft: 300, // Updated to 5 minutes
             players: {}, // { id: { x, y, z, score, rotY, name, character, isIcePowered, freezeTimer } }
             penguins: [],
             iceFlowers: [], // { id, x, y, z }
@@ -694,20 +705,30 @@
         // --- 3D VOXEL MESH BUILDERS & ANIMATION NODES ---
         function createCharacterMesh(type, isIcePowered = false) {
             const charGroup = new THREE.Group();
-            const isLuigi = (type === 'luigi');
             
-            // Standard vs Ice Power Color Swaps
-            let colorPrimary = isLuigi ? 0x00a200 : 0xe42400; 
-            let colorSecondary = isLuigi ? 0x001a70 : 0x002494;
+            // Character specific color mapping
+            let colorPrimary = 0xe42400;   // Red default
+            let colorSecondary = 0x002494; // Blue default
+            let colorHair = 0x843400;      // Brown default
 
-            if (isIcePowered) {
-                // Ice Mario: Light Blue Shirt/Hat + Red Overalls
-                // Ice Luigi: Light Blue Shirt/Hat + Green Overalls
-                colorPrimary = 0xa0f0ff; // Ice Light Blue
-                colorSecondary = isLuigi ? 0x00a200 : 0xe42400;
+            if (type === 'luigi') {
+                colorPrimary = 0x00a200; colorSecondary = 0x001a70; colorHair = 0x542a00;
+            } else if (type === 'peach') {
+                colorPrimary = 0xff88aa; colorSecondary = 0xffbbee; colorHair = 0xffcc00;
+            } else if (type === 'toad') {
+                colorPrimary = 0xffffff; colorSecondary = 0x0033cc; colorHair = 0xaa2222;
+            } else if (type === 'wario') {
+                colorPrimary = 0xffcc00; colorSecondary = 0x660099; colorHair = 0x843400;
+            } else if (type === 'waluigi') {
+                colorPrimary = 0x6600cc; colorSecondary = 0x111111; colorHair = 0x542a00;
             }
 
-            const colorHair = isLuigi ? 0x542a00 : 0x843400;
+            // Power-up color swapping
+            let defaultPrimary = colorPrimary;
+            if (isIcePowered) {
+                colorPrimary = 0xa0f0ff; // Ice Light Blue for shirts
+                colorSecondary = defaultPrimary; // Original primary color goes to the overalls
+            }
             
             const matPrimary = new THREE.MeshLambertMaterial({ color: colorPrimary });
             const matSecondary = new THREE.MeshLambertMaterial({ color: colorSecondary });
@@ -808,9 +829,18 @@
                 if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; }
             });
 
-            if (isLuigi) {
-                charGroup.scale.set(1.35, 1.75, 1.35);
-            } else {
+            // Adjust scale structurally based on character class
+            if (type === 'luigi') {
+                charGroup.scale.set(1.35, 1.75, 1.35); // Taller, slightly thinner
+            } else if (type === 'peach') {
+                charGroup.scale.set(1.4, 1.6, 1.4); // Taller than Mario, slight build
+            } else if (type === 'toad') {
+                charGroup.scale.set(1.2, 1.1, 1.2); // Tiny character
+            } else if (type === 'wario') {
+                charGroup.scale.set(1.8, 1.4, 1.8); // Short and wide
+            } else if (type === 'waluigi') {
+                charGroup.scale.set(1.2, 1.9, 1.2); // Extremely tall and skinny
+            } else { // mario
                 charGroup.scale.set(1.5, 1.5, 1.5);
             }
 
@@ -1195,11 +1225,18 @@
                     u.body.position.y = 0;
                 }
 
-                if(pData.vy > 0) {
-                    mesh.scale.set(1.2, 1.8, 1.2);
-                } else {
-                    mesh.scale.set(1.5, 1.5, 1.5);
-                }
+                // Character-specific baseline scaling when jumping vs idle
+                let jumpScale = (pData.vy > 0) ? 0.8 : 1.0; // squish horizontally
+                let heightScale = (pData.vy > 0) ? 1.2 : 1.0; // stretch vertically
+                
+                let baseScaleX = 1.5, baseScaleY = 1.5, baseScaleZ = 1.5;
+                if (charType === 'luigi') { baseScaleX = 1.35; baseScaleY = 1.75; baseScaleZ = 1.35; }
+                else if (charType === 'peach') { baseScaleX = 1.4; baseScaleY = 1.6; baseScaleZ = 1.4; }
+                else if (charType === 'toad') { baseScaleX = 1.2; baseScaleY = 1.1; baseScaleZ = 1.2; }
+                else if (charType === 'wario') { baseScaleX = 1.8; baseScaleY = 1.4; baseScaleZ = 1.8; }
+                else if (charType === 'waluigi') { baseScaleX = 1.2; baseScaleY = 1.9; baseScaleZ = 1.2; }
+
+                mesh.scale.set(baseScaleX * jumpScale, baseScaleY * heightScale, baseScaleZ * jumpScale);
             });
 
             // Clean up removed players
