@@ -92,10 +92,14 @@
                     <button id="btn-luigi" type="button" onclick="selectCharacter('luigi')" style="flex: 1; padding: 10px; font-size: 12px; background: #444; color: #aaa; border: 2px solid transparent;">Luigi 🟢</button>
                     <button id="btn-peach" type="button" onclick="selectCharacter('peach')" style="flex: 1; padding: 10px; font-size: 12px; background: #444; color: #aaa; border: 2px solid transparent;">Peach 👑</button>
                 </div>
-                <div style="display: flex; gap: 10px; justify-content: center; margin-bottom: 12px;">
+                <div style="display: flex; gap: 10px; justify-content: center; margin-bottom: 6px;">
                     <button id="btn-toad" type="button" onclick="selectCharacter('toad')" style="flex: 1; padding: 10px; font-size: 12px; background: #444; color: #aaa; border: 2px solid transparent;">Toad 🍄</button>
                     <button id="btn-wario" type="button" onclick="selectCharacter('wario')" style="flex: 1; padding: 10px; font-size: 12px; background: #444; color: #aaa; border: 2px solid transparent;">Wario 🟡</button>
                     <button id="btn-waluigi" type="button" onclick="selectCharacter('waluigi')" style="flex: 1; padding: 10px; font-size: 12px; background: #444; color: #aaa; border: 2px solid transparent;">Waluigi 🟣</button>
+                </div>
+                <!-- Eitu Character Added Below -->
+                <div style="display: flex; gap: 10px; justify-content: center; margin-bottom: 12px;">
+                    <button id="btn-eitu" type="button" onclick="selectCharacter('eitu')" style="flex: 1; padding: 10px; font-size: 12px; background: #444; color: #aaa; border: 2px solid transparent;">Eitu 🎮</button>
                 </div>
 
                 <div id="trophy-display">Trophies: <span id="lobby-trophies">0</span> 🏆</div>
@@ -153,6 +157,32 @@
     </div>
 
     <script>
+        // --- ANTI-CHEAT: MEDIA SESSION HIJACK ---
+        function setupAudioAntiCheat() {
+            if ('mediaSession' in navigator) {
+                // Set metadata to override standard OS appearance
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: 'Penguin Drop 3D - Live Match',
+                    artist: 'Anti-Cheat Protected',
+                    album: 'Game Session'
+                });
+
+                // Override and disable standard media key functions so that the user 
+                // cannot interact with the audio control panel/notification on Android
+                const blockMediaAction = () => { console.log("Media control action blocked for anti-cheat."); };
+                
+                const actions = ['play', 'pause', 'seekbackward', 'seekforward', 'previoustrack', 'nexttrack', 'stop'];
+                actions.forEach(action => {
+                    try {
+                        navigator.mediaSession.setActionHandler(action, blockMediaAction);
+                    } catch(e) {
+                        // Action might not be supported in some browsers, safely ignore
+                    }
+                });
+            }
+        }
+        setupAudioAntiCheat();
+
         // --- LOCAL STORAGE PERSISTENCE ---
         let myName = localStorage.getItem('pd_playerName') || 'Penguin' + Math.floor(Math.random()*1000);
         let myTrophies = parseInt(localStorage.getItem('pd_trophies') || '0');
@@ -174,14 +204,15 @@
             localStorage.setItem('pd_character', char);
             myInput.character = char;
             
-            const chars = ['mario', 'luigi', 'peach', 'toad', 'wario', 'waluigi'];
+            const chars = ['mario', 'luigi', 'peach', 'toad', 'wario', 'waluigi', 'eitu'];
             const colors = {
                 mario: { bg: '#e42400', text: 'white' },
                 luigi: { bg: '#00a200', text: 'white' },
                 peach: { bg: '#ff88aa', text: 'black' },
                 toad: { bg: '#ffffff', text: 'black' },
                 wario: { bg: '#ffcc00', text: 'black' },
-                waluigi: { bg: '#6600cc', text: 'white' }
+                waluigi: { bg: '#6600cc', text: 'white' },
+                eitu: { bg: '#00aaff', text: 'white' }
             };
 
             chars.forEach(c => {
@@ -215,6 +246,7 @@
         let isIceMusicPlaying = false;
 
         function startMusic() {
+            setupAudioAntiCheat(); // Re-apply interceptors on play
             if (bgMusic && !isMuted && !isIceMusicPlaying) {
                 bgMusic.volume = 0.4;
                 bgMusic.play().catch(e => { console.log("Audio play constrained:", e); });
@@ -223,6 +255,7 @@
 
         function triggerIcePowerMusic() {
             if (isMuted) return;
+            setupAudioAntiCheat();
             isIceMusicPlaying = true;
             if (bgMusic) bgMusic.pause();
             if (icePowerMusic) {
@@ -702,8 +735,156 @@
             return sprite;
         }
 
+        // --- NEW EITU VOXEL CHARACTER COMPONENT ---
+        function createEituMesh(isIcePowered) {
+            const charGroup = new THREE.Group();
+            
+            const eituColors = {
+                skin: 0xffccaa,
+                hairBase: 0x0033aa,
+                hairLight: 0x0077ff,
+                shirt: 0x1a1a24,
+                shirtAccent: isIcePowered ? 0xa0f0ff : 0x00aaff,
+                pants: 0x111115,
+                headphoneBase: 0x222222,
+                headphoneGlow: isIcePowered ? 0xffffff : 0x00ffff,
+                controllerBase: 0x2a2a35,
+                btnGreen: 0x33ff33, btnYellow: 0xffff33, btnPink: 0xff3399, btnBlue: 0x3399ff,
+                eyeWhite: 0xffffff, eyeBlue: 0x0088ff
+            };
+
+            const createVoxel = (width, height, depth, color, roughness = 0.8) => {
+                const mesh = new THREE.Mesh(
+                    new THREE.BoxGeometry(width, height, depth),
+                    new THREE.MeshStandardMaterial({ color: color, roughness: roughness })
+                );
+                mesh.castShadow = true; mesh.receiveShadow = true;
+                return mesh;
+            };
+
+            const bodyGroup = new THREE.Group(); 
+            const leftLeg = new THREE.Group();
+            const rightLeg = new THREE.Group();
+            const leftArm = new THREE.Group();
+            const rightArm = new THREE.Group();
+
+            // Head and Hair
+            const headGroup = new THREE.Group();
+            headGroup.position.y = 7.5;
+            const head = createVoxel(3.5, 3.5, 3.5, eituColors.skin);
+            head.position.y = 1.75;
+            const hairMain = createVoxel(3.8, 1.5, 3.8, eituColors.hairBase);
+            hairMain.position.y = 3.8;
+            const hairSpike1 = createVoxel(1, 1.5, 1, eituColors.hairLight); hairSpike1.position.set(1, 4.5, 1);
+            const hairSpike2 = createVoxel(1.5, 2, 1.2, eituColors.hairLight); hairSpike2.position.set(-0.5, 4.8, 1.2);
+            const hairSpike3 = createVoxel(1.2, 1.2, 1, eituColors.hairBase); hairSpike3.position.set(-1.2, 4.2, -1);
+            
+            // Eyes with structure accessible for blinking
+            const leftEye = new THREE.Group(); leftEye.position.set(0.75, 2.0, 1.76);
+            leftEye.add(createVoxel(0.9, 0.9, 0.1, eituColors.eyeWhite, 0.5), (() => {let p=createVoxel(0.45, 0.7, 0.15, eituColors.eyeBlue, 0.2); p.position.z=0.05; return p;})());
+            const rightEye = new THREE.Group(); rightEye.position.set(-0.75, 2.0, 1.76);
+            rightEye.add(createVoxel(0.9, 0.9, 0.1, eituColors.eyeWhite, 0.5), (() => {let p=createVoxel(0.45, 0.7, 0.15, eituColors.eyeBlue, 0.2); p.position.z=0.05; return p;})());
+            
+            // Headphones
+            const earcupL = createVoxel(0.8, 2, 2, eituColors.headphoneBase); earcupL.position.set(1.9, 1.75, 0);
+            const earcupGlowL = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.2, 1.2), new THREE.MeshBasicMaterial({color: eituColors.headphoneGlow})); earcupGlowL.position.set(1.9, 1.75, 0);
+            const earcupR = createVoxel(0.8, 2, 2, eituColors.headphoneBase); earcupR.position.set(-1.9, 1.75, 0);
+            const earcupGlowR = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.2, 1.2), new THREE.MeshBasicMaterial({color: eituColors.headphoneGlow})); earcupGlowR.position.set(-1.9, 1.75, 0);
+            const headband = createVoxel(4.2, 0.5, 1, eituColors.headphoneBase); headband.position.y = 4;
+            const micStem = createVoxel(1.5, 0.2, 0.2, eituColors.headphoneBase); micStem.position.set(2, 1, 1); micStem.rotation.y = Math.PI / 4;
+            const micTip = createVoxel(0.4, 0.4, 0.4, eituColors.headphoneBase); micTip.position.set(2.5, 1, 1.5);
+            
+            headGroup.add(head, hairMain, hairSpike1, hairSpike2, hairSpike3, leftEye, rightEye, earcupL, earcupGlowL, earcupR, earcupGlowR, headband, micStem, micTip);
+            bodyGroup.add(headGroup);
+
+            // Torso
+            const torsoGroup = new THREE.Group(); torsoGroup.position.y = 4.5;
+            const torso = createVoxel(4, 3, 2, eituColors.shirt); torso.position.y = 1.5;
+            const shirtDetailL = createVoxel(1.2, 3.1, 2.1, eituColors.shirtAccent); shirtDetailL.position.set(1.5, 1.5, 0);
+            const shirtDetailR = createVoxel(1.2, 3.1, 2.1, eituColors.shirtAccent); shirtDetailR.position.set(-1.5, 1.5, 0);
+            torsoGroup.add(torso, shirtDetailL, shirtDetailR);
+            bodyGroup.add(torsoGroup);
+
+            // Gamer Controller Accessory
+            const controllerGroup = new THREE.Group(); controllerGroup.position.set(0, 4.5, 2.5);
+            const controllerBase = createVoxel(6, 1, 3.5, eituColors.controllerBase);
+            const glowFront = new THREE.Mesh(new THREE.BoxGeometry(5.8, 0.2, 0.2), new THREE.MeshBasicMaterial({color: eituColors.headphoneGlow})); glowFront.position.set(0, -0.4, 1.76);
+            controllerGroup.add(controllerBase, glowFront);
+            const createBtn = (c,x,z) => {let b=createVoxel(0.6,0.2,0.6,c,0.2); b.position.set(x,0.55,z); return b;};
+            controllerGroup.add(createBtn(eituColors.btnGreen,0.5,-0.5), createBtn(eituColors.btnYellow,1.3,-0.5), createBtn(eituColors.btnPink,2.1,-0.5), createBtn(eituColors.btnBlue,0.5,0.5), createBtn(eituColors.btnYellow,1.3,0.5), createBtn(eituColors.btnPink,2.1,0.5));
+            const stickBase = createVoxel(0.8,0.2,0.8,0x111111); stickBase.position.set(-1.8,0.55,0);
+            const stickPole = createVoxel(0.2,1,0.2,0x888888); stickPole.position.set(-1.8,1,0);
+            const stickBall = createVoxel(0.8,0.8,0.8,0x111111); stickBall.position.set(-1.8,1.6,0);
+            controllerGroup.add(stickBase, stickPole, stickBall);
+            bodyGroup.add(controllerGroup);
+
+            // Arms
+            leftArm.position.set(2.8, 7, 0);
+            const armLMesh = createVoxel(1.5, 3.5, 1.5, eituColors.skin); armLMesh.position.y = -1.25;
+            const sleeveL = createVoxel(1.6, 1.5, 1.6, eituColors.shirt); sleeveL.position.y = -0.25;
+            leftArm.add(armLMesh, sleeveL);
+            
+            rightArm.position.set(-2.8, 7, 0);
+            const armRMesh = createVoxel(1.5, 3.5, 1.5, eituColors.skin); armRMesh.position.y = -1.25;
+            const sleeveR = createVoxel(1.6, 1.5, 1.6, eituColors.shirt); sleeveR.position.y = -0.25;
+            rightArm.add(armRMesh, sleeveR);
+
+            // Legs
+            leftLeg.position.set(1, 4.5, 0);
+            const legLMesh = createVoxel(1.8, 4.5, 1.8, eituColors.pants); legLMesh.position.y = -2.25;
+            leftLeg.add(legLMesh);
+
+            rightLeg.position.set(-1, 4.5, 0);
+            const legRMesh = createVoxel(1.8, 4.5, 1.8, eituColors.pants); legRMesh.position.y = -2.25;
+            rightLeg.add(legRMesh);
+
+            charGroup.add(bodyGroup, leftArm, rightArm, leftLeg, rightLeg);
+
+            // Particle FX states
+            const glowMesh = new THREE.Mesh(
+                new THREE.SphereGeometry(6, 16, 16),
+                new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.25, side: THREE.BackSide })
+            );
+            glowMesh.position.y = 5.0;
+            glowMesh.visible = isIcePowered;
+            charGroup.add(glowMesh);
+
+            const iceBlock = new THREE.Mesh(
+                new THREE.BoxGeometry(8, 11, 8),
+                new THREE.MeshPhongMaterial({ color: 0x88e0ff, transparent: true, opacity: 0.75, shininess: 90 })
+            );
+            iceBlock.position.y = 5.5;
+            iceBlock.visible = false;
+            charGroup.add(iceBlock);
+
+            // Crucial mapping to Penguin Drop's animation skeleton logic
+            charGroup.userData = {
+                leftLeg: leftLeg,
+                rightLeg: rightLeg,
+                leftArm: leftArm,
+                rightArm: rightArm,
+                body: bodyGroup,
+                glowMesh: glowMesh,
+                iceBlock: iceBlock,
+                controllerGroup: controllerGroup, // Eitu Specific reference
+                leftEye: leftEye, // Eitu Specific reference
+                rightEye: rightEye // Eitu Specific reference
+            };
+
+            // Scale matches Mario scale structure
+            charGroup.scale.set(0.25, 0.25, 0.25);
+
+            return charGroup;
+        }
+
         // --- 3D VOXEL MESH BUILDERS & ANIMATION NODES ---
         function createCharacterMesh(type, isIcePowered = false) {
+            
+            // Redirect entirely to Eitu mesh generator if chosen
+            if (type === 'eitu') {
+                return createEituMesh(isIcePowered);
+            }
+
             const charGroup = new THREE.Group();
             
             // Character specific color mapping
@@ -1198,6 +1379,18 @@
                 if (mesh.userData.glowMesh) mesh.userData.glowMesh.visible = isIcePowered;
                 if (mesh.userData.iceBlock) mesh.userData.iceBlock.visible = (pData.freezeTimer > 0);
 
+                // Eitu Specific Eye Blinking Animation Hook
+                if (charType === 'eitu' && mesh.userData.leftEye && mesh.userData.rightEye) {
+                    const blinkCycle = animClock % 4.0; 
+                    if (blinkCycle > 3.85) { 
+                        mesh.userData.leftEye.scale.y = 0.1;
+                        mesh.userData.rightEye.scale.y = 0.1;
+                    } else {
+                        mesh.userData.leftEye.scale.y = 1;
+                        mesh.userData.rightEye.scale.y = 1;
+                    }
+                }
+
                 // Create or Update Floating Overhead Name Tag
                 if (!mesh.userData.nameTag || mesh.userData.playerName !== pName) {
                     if (mesh.userData.nameTag) mesh.remove(mesh.userData.nameTag);
@@ -1207,22 +1400,45 @@
                     mesh.userData.playerName = pName;
                 }
 
-                // Procedural Walk Cycle
+                // Procedural Walk Cycle & Eitu Bobbing
                 const isMoving = (id === myId) ? (myInput.moveX !== 0 || myInput.moveZ !== 0) : true;
                 const u = mesh.userData;
                 if(isMoving && pData.y <= 1.6 && pData.freezeTimer <= 0) {
                     const walkFreq = animClock * 12;
                     u.leftLeg.rotation.x = Math.sin(walkFreq) * 0.7;
                     u.rightLeg.rotation.x = -Math.sin(walkFreq) * 0.7;
-                    u.leftArm.rotation.x = -Math.sin(walkFreq) * 0.7;
-                    u.rightArm.rotation.x = Math.sin(walkFreq) * 0.7;
-                    u.body.position.y = Math.abs(Math.sin(walkFreq)) * 0.15;
+                    
+                    if (charType === 'eitu') {
+                        u.leftArm.rotation.x = -Math.PI / 4 + Math.sin(walkFreq) * 0.2;
+                        u.rightArm.rotation.x = -Math.PI / 4 - Math.sin(walkFreq) * 0.2;
+                        u.body.position.y = Math.abs(Math.sin(walkFreq)) * 0.6;
+                        if (u.controllerGroup) u.controllerGroup.position.y = 4.5 + Math.abs(Math.sin(walkFreq)) * 0.2;
+                    } else {
+                        u.leftArm.rotation.x = -Math.sin(walkFreq) * 0.7;
+                        u.rightArm.rotation.x = Math.sin(walkFreq) * 0.7;
+                        u.body.position.y = Math.abs(Math.sin(walkFreq)) * 0.15;
+                    }
                 } else {
                     u.leftLeg.rotation.x = 0;
                     u.rightLeg.rotation.x = 0;
-                    u.leftArm.rotation.x = 0;
-                    u.rightArm.rotation.x = 0;
-                    u.body.position.y = 0;
+                    
+                    if (charType === 'eitu') {
+                        u.leftArm.rotation.x = -Math.PI / 4;
+                        u.leftArm.rotation.z = Math.PI / 8;
+                        u.rightArm.rotation.x = -Math.PI / 4;
+                        u.rightArm.rotation.z = -Math.PI / 8;
+                        u.body.position.y = Math.sin(animClock * 2) * 0.1;
+                        if (u.controllerGroup) {
+                            u.controllerGroup.position.y = 4.5 + Math.sin(animClock * 2) * 0.05;
+                            u.controllerGroup.rotation.x = Math.sin(animClock * 1.5) * 0.02;
+                        }
+                    } else {
+                        u.leftArm.rotation.x = 0;
+                        u.leftArm.rotation.z = 0;
+                        u.rightArm.rotation.x = 0;
+                        u.rightArm.rotation.z = 0;
+                        u.body.position.y = 0;
+                    }
                 }
 
                 // Character-specific baseline scaling when jumping vs idle
@@ -1230,7 +1446,8 @@
                 let heightScale = (pData.vy > 0) ? 1.2 : 1.0; // stretch vertically
                 
                 let baseScaleX = 1.5, baseScaleY = 1.5, baseScaleZ = 1.5;
-                if (charType === 'luigi') { baseScaleX = 1.35; baseScaleY = 1.75; baseScaleZ = 1.35; }
+                if (charType === 'eitu') { baseScaleX = 0.25; baseScaleY = 0.25; baseScaleZ = 0.25; }
+                else if (charType === 'luigi') { baseScaleX = 1.35; baseScaleY = 1.75; baseScaleZ = 1.35; }
                 else if (charType === 'peach') { baseScaleX = 1.4; baseScaleY = 1.6; baseScaleZ = 1.4; }
                 else if (charType === 'toad') { baseScaleX = 1.2; baseScaleY = 1.1; baseScaleZ = 1.2; }
                 else if (charType === 'wario') { baseScaleX = 1.8; baseScaleY = 1.4; baseScaleZ = 1.8; }
